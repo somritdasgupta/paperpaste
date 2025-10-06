@@ -1,113 +1,155 @@
-"use client"
+"use client";
 
-import type React from "react"
+import type React from "react";
 
-import { useRouter } from "next/navigation"
-import { useEffect, useRef, useState } from "react"
-import { Input } from "@/components/ui/input"
-import { Button } from "@/components/ui/button"
-import { cn } from "@/lib/utils"
+import { useRouter } from "next/navigation";
+import { useEffect, useRef, useState } from "react";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
+import { getSupabaseBrowserWithCode } from "@/lib/supabase/client";
 
 function randomCode(): string {
   // 7-digit numeric code
-  return Math.floor(1000000 + Math.random() * 9000000).toString()
+  return Math.floor(1000000 + Math.random() * 9000000).toString();
 }
 
 export default function JoinForm() {
-  const router = useRouter()
-  const [digits, setDigits] = useState<string[]>(["", "", "", "", "", "", ""])
-  const refs = useRef<Array<HTMLInputElement | null>>([])
+  const router = useRouter();
+  const [digits, setDigits] = useState<string[]>(["", "", "", "", "", "", ""]);
+  const [isValidating, setIsValidating] = useState(false);
+  const [validationError, setValidationError] = useState<string | null>(null);
+  const refs = useRef<Array<HTMLInputElement | null>>([]);
 
-  const cleanedJoin = () => digits.join("").replace(/\D/g, "").slice(0, 7)
+  const cleanedJoin = () => digits.join("").replace(/\D/g, "").slice(0, 7);
 
-  const onJoin = (e: React.FormEvent) => {
-    e.preventDefault()
-    const cleaned = cleanedJoin()
-    if (cleaned.length === 7) {
-      router.push(`/session/${cleaned}`)
+  const validateAndJoin = async (code: string) => {
+    if (code.length !== 7) return false;
+
+    setIsValidating(true);
+    setValidationError(null);
+
+    try {
+      const supabase = getSupabaseBrowserWithCode(code);
+      if (!supabase) {
+        setValidationError("Supabase not configured");
+        return false;
+      }
+
+      // Check if session exists
+      const { data, error } = await supabase
+        .from("sessions")
+        .select("code")
+        .eq("code", code)
+        .single();
+
+      if (error || !data) {
+        setValidationError("Session not found. Please check the code.");
+        return false;
+      }
+
+      // Valid session found, proceed to join
+      router.push(`/session/${code}`);
+      return true;
+    } catch (e: any) {
+      setValidationError("Failed to validate session code");
+      return false;
+    } finally {
+      setIsValidating(false);
     }
-  }
+  };
+
+  const onJoin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const cleaned = cleanedJoin();
+    if (cleaned.length === 7) {
+      await validateAndJoin(cleaned);
+    }
+  };
 
   const onCreate = () => {
-    const newCode = randomCode()
-    router.push(`/session/${newCode}?new=1`)
-  }
+    const newCode = randomCode();
+    router.push(`/session/${newCode}?new=1`);
+  };
 
   const setDigit = (index: number, val: string) => {
-    const v = (val || "").replace(/\D/g, "").slice(0, 1)
+    const v = (val || "").replace(/\D/g, "").slice(0, 1);
     setDigits((prev) => {
-      const next = [...prev]
-      next[index] = v
-      return next
-    })
-  }
+      const next = [...prev];
+      next[index] = v;
+      return next;
+    });
+  };
 
-  const onKeyDown = (index: number, e: React.KeyboardEvent<HTMLInputElement>) => {
+  const onKeyDown = (
+    index: number,
+    e: React.KeyboardEvent<HTMLInputElement>
+  ) => {
     if (e.key === "Backspace" && !digits[index] && index > 0) {
-      e.preventDefault()
-      refs.current[index - 1]?.focus()
-      setDigit(index - 1, "")
-      return
+      e.preventDefault();
+      refs.current[index - 1]?.focus();
+      setDigit(index - 1, "");
+      return;
     }
     if (e.key === "ArrowLeft" && index > 0) {
-      refs.current[index - 1]?.focus()
-      return
+      refs.current[index - 1]?.focus();
+      return;
     }
     if (e.key === "ArrowRight" && index < 6) {
-      refs.current[index + 1]?.focus()
-      return
+      refs.current[index + 1]?.focus();
+      return;
     }
-  }
+  };
 
   const onChange = (index: number, e: React.ChangeEvent<HTMLInputElement>) => {
-    const v = e.target.value.replace(/\D/g, "")
+    const v = e.target.value.replace(/\D/g, "");
     if (v.length === 0) {
-      setDigit(index, "")
-      return
+      setDigit(index, "");
+      return;
     }
-    const chars = v.slice(0, 7 - index).split("")
+    const chars = v.slice(0, 7 - index).split("");
     setDigits((prev) => {
-      const next = [...prev]
+      const next = [...prev];
       for (let i = 0; i < chars.length; i++) {
-        const pos = index + i
-        if (pos < 7) next[pos] = chars[i]
+        const pos = index + i;
+        if (pos < 7) next[pos] = chars[i];
       }
-      return next
-    })
-    const nextIndex = Math.min(index + chars.length, 6)
-    refs.current[nextIndex]?.focus()
-  }
+      return next;
+    });
+    const nextIndex = Math.min(index + chars.length, 6);
+    refs.current[nextIndex]?.focus();
+  };
 
   const onPaste = (e: React.ClipboardEvent<HTMLInputElement>) => {
-    const text = e.clipboardData.getData("text") || ""
-    const cleaned = text.replace(/\D/g, "").slice(0, 7).split("")
+    const text = e.clipboardData.getData("text") || "";
+    const cleaned = text.replace(/\D/g, "").slice(0, 7).split("");
     if (cleaned.length) {
-      e.preventDefault()
+      e.preventDefault();
       setDigits((prev) => {
-        const next = [...prev]
-        for (let i = 0; i < 7; i++) next[i] = cleaned[i] || ""
-        return next
-      })
-      refs.current[Math.min(cleaned.length, 6)]?.focus()
+        const next = [...prev];
+        for (let i = 0; i < 7; i++) next[i] = cleaned[i] || "";
+        return next;
+      });
+      refs.current[Math.min(cleaned.length, 6)]?.focus();
     }
-  }
+  };
 
   useEffect(() => {
-    // auto submit when all 7 digits filled
-    const val = cleanedJoin()
-    if (val.length === 7) {
-      router.push(`/session/${val}`)
+    // auto validate and join when all 7 digits filled
+    const val = cleanedJoin();
+    if (val.length === 7 && !isValidating) {
+      validateAndJoin(val);
     }
-  }, [digits]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [digits]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <form onSubmit={onJoin} className="flex flex-col gap-4 sm:gap-6">
-      <div className="grid grid-cols-7 gap-2 sm:gap-3">
+      <div className="grid grid-cols-7 gap-1.5 sm:gap-3 max-w-md mx-auto">
         {digits.map((d, i) => (
           <Input
             key={i}
             ref={(el) => {
-              refs.current[i] = el
+              refs.current[i] = el;
             }}
             inputMode="numeric"
             pattern="[0-9]*"
@@ -116,20 +158,52 @@ export default function JoinForm() {
             onKeyDown={(e) => onKeyDown(i, e)}
             onChange={(e) => onChange(i, e)}
             onPaste={onPaste}
+            disabled={isValidating}
             aria-label={`Digit ${i + 1}`}
-            className={cn("h-12 sm:h-14 text-2xl sm:text-3xl text-center font-bold tracking-widest", "w-full")}
+            className={cn(
+              "h-12 sm:h-14 md:h-16",
+              "text-lg sm:text-2xl md:text-3xl",
+              "text-center font-bold tracking-widest",
+              "min-w-0 flex-1",
+              validationError &&
+                "border-destructive focus-visible:ring-destructive",
+              isValidating && "opacity-50"
+            )}
           />
         ))}
       </div>
 
-      <div className="flex flex-col sm:flex-row gap-3 sm:gap-2">
-        <Button type="submit" variant="default" className="w-full sm:w-auto">
-          Get in
+      {validationError && (
+        <div className="text-sm text-destructive text-center bg-destructive/10 border border-destructive/20 rounded-md p-2 max-w-md mx-auto">
+          {validationError}
+        </div>
+      )}
+
+      {isValidating && (
+        <div className="text-sm text-muted-foreground text-center">
+          Validating session code...
+        </div>
+      )}
+
+      <div className="flex flex-col sm:flex-row gap-3 sm:gap-2 max-w-md mx-auto w-full">
+        <Button
+          type="submit"
+          variant="default"
+          className="w-full sm:flex-1"
+          disabled={isValidating || cleanedJoin().length !== 7}
+        >
+          {isValidating ? "Validating..." : "Join Session"}
         </Button>
-        <Button type="button" variant="secondary" onClick={onCreate} className="w-full sm:w-auto">
-          Create new session
+        <Button
+          type="button"
+          variant="secondary"
+          onClick={onCreate}
+          className="w-full sm:flex-1"
+          disabled={isValidating}
+        >
+          Create New
         </Button>
       </div>
     </form>
-  )
+  );
 }

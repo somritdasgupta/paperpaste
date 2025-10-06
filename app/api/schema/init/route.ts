@@ -13,8 +13,14 @@ CREATE TABLE IF NOT EXISTS public.sessions (
 CREATE TABLE IF NOT EXISTS public.devices (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   session_code text NOT NULL,
+  device_id text NOT NULL,
+  device_name_encrypted text,
   is_host boolean NOT NULL DEFAULT false,
-  last_seen_at timestamptz NOT NULL DEFAULT now()
+  is_frozen boolean NOT NULL DEFAULT false,
+  can_view boolean NOT NULL DEFAULT true,
+  last_seen timestamptz NOT NULL DEFAULT now(),
+  created_at timestamptz NOT NULL DEFAULT now(),
+  UNIQUE(session_code, device_id)
 );
 CREATE INDEX IF NOT EXISTS idx_devices_session_code ON public.devices(session_code);
 
@@ -22,12 +28,14 @@ CREATE TABLE IF NOT EXISTS public.items (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   session_code text NOT NULL,
   kind text NOT NULL DEFAULT 'text',
-  content text,
+  content_encrypted text,
   file_url text,
+  device_id text,
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS idx_items_session_code_created_at ON public.items(session_code, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_items_device_id ON public.items(device_id);
 
 CREATE OR REPLACE FUNCTION public.set_updated_at()
 RETURNS trigger AS $$

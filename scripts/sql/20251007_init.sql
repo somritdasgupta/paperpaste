@@ -1,59 +1,86 @@
--- Enable necessary extensions
-create extension if not exists "pgcrypto";
-create extension if not exists "uuid-ossp";
+-- End-to-End Encrypted Paperpaste Database Schema
+-- This schema supports anonymous, encrypted clipboard sharing
 
--- Sessions with 7-digit code as primary key
-create table if not exists public.sessions (
-  code char(7) primary key,
-  created_at timestamptz not null default now(),
-  last_activity_at timestamptz not null default now(),
-  secret uuid not null default gen_random_uuid()
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
+
+-- Sessions with enhanced security
+CREATE TABLE IF NOT EXISTS public.sessions (
+  code text PRIMARY KEY,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  last_activity_at timestamptz NOT NULL DEFAULT now()
 );
 
--- Devices per session
-create table if not exists public.devices (
-  id uuid primary key default gen_random_uuid(),
-  session_code char(7) not null references public.sessions(code) on delete cascade,
-  device_id uuid not null,
-  last_seen timestamptz not null default now(),
-  unique(session_code, device_id)
+-- Devices with encrypted names and permission system
+CREATE TABLE IF NOT EXISTS public.devices (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  session_code text NOT NULL,
+  device_id text NOT NULL,
+  device_name_encrypted text,
+  is_host boolean NOT NULL DEFAULT false,
+  is_frozen boolean NOT NULL DEFAULT false,
+  can_view boolean NOT NULL DEFAULT true,
+  last_seen timestamptz NOT NULL DEFAULT now(),
+  created_at timestamptz NOT NULL DEFAULT now(),
+  UNIQUE(session_code, device_id)
 );
+CREATE INDEX IF NOT EXISTS idx_devices_session_code ON public.devices(session_code);
+CREATE INDEX IF NOT EXISTS idx_devices_last_seen ON public.devices(last_seen);
 
--- Clipboard items
-create type public.item_kind as enum ('text','code','file');
-create table if not exists public.items (
-  id uuid primary key default gen_random_uuid(),
-  session_code char(7) not null references public.sessions(code) on delete cascade,
-  type public.item_kind not null,
-  content text,
-  storage_path text,
-  mime_type text,
-  size bigint,
-  created_at timestamptz not null default now()
+-- Items with end-to-end encryption
+CREATE TABLE IF NOT EXISTS public.items (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  session_code text NOT NULL,
+  kind text NOT NULL DEFAULT 'text',
+  content_encrypted text,
+  file_url text,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now()
 );
-create index if not exists idx_items_session_created on public.items(session_code, created_at desc);
+CREATE INDEX IF NOT EXISTS idx_items_session_code_created_at ON public.items(session_code, created_at DESC);
 
--- Trigger: keep session last_activity_at fresh
-create or replace function public.touch_session_activity()
-returns trigger language plpgsql as $$
-begin
-  update public.sessions set last_activity_at = now() where code = new.session_code;
-  return new;
-end
-$$;
+-- Trigger for updated_at
+CREATE OR REPLACE FUNCTION public.set_updated_at()
+RETURNS trigger AS $$
+BEGIN
+  NEW.updated_at = now();
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
 
-drop trigger if exists trg_items_touch_session on public.items;
-create trigger trg_items_touch_session
-after insert or update on public.items
-for each row execute function public.touch_session_activity();
+DROP TRIGGER IF EXISTS trg_items_updated_at ON public.items;
+CREATE TRIGGER trg_items_updated_at
+BEFORE UPDATE ON public.items
+FOR EACH ROW
+EXECUTE FUNCTION public.set_updated_at();
 
--- Auto-destruct function (run via scheduled cron or on-demand)
-create or replace function public.cleanup_inactive_sessions()
-returns void language plpgsql as $$
-begin
-  delete from public.sessions s
-  where s.last_activity_at < now() - interval '3 hours';
-end
+-- Enhanced cleanup function for old sessions and associated data
+CREATE OR REPLACE FUNCTION public.cleanup_inactive_sessions(cutoff_hours int default 3)
+RETURNS table(deleted_sessions_count int, deleted_items_count int, deleted_devices_count int) 
+LANGUAGE plpgsql AS $$
+DECLARE
+  cutoff_ts timestamptz := now() - interval '1 hour' * cutoff_hours;
+  deleted_items int;
+  deleted_devices int;
+  deleted_sessions int;
+BEGIN
+  -- Delete items from inactive sessions
+  DELETE FROM public.items WHERE session_code IN (
+    SELECT code FROM public.sessions WHERE last_activity_at < cutoff_ts
+  );
+  GET DIAGNOSTICS deleted_items = ROW_COUNT;
+
+  -- Delete devices from inactive sessions
+  DELETE FROM public.devices WHERE session_code IN (
+    SELECT code FROM public.sessions WHERE last_activity_at < cutoff_ts
+  );
+  GET DIAGNOSTICS deleted_devices = ROW_COUNT;
+
+  -- Delete inactive sessions
+  DELETE FROM public.sessions WHERE last_activity_at < cutoff_ts;
+  GET DIAGNOSTICS deleted_sessions = ROW_COUNT;
+
+  RETURN QUERY SELECT deleted_sessions, deleted_items, deleted_devices;
+END
 $$;
 
 -- Supabase Storage bucket (public for easy downloads)
@@ -70,15 +97,15 @@ alter table public.items enable row level security;
 -- Development policies (broad; tighten in production)
 do $$
 begin
-  if not exists (select 1 from pg_policies where polname = 'sessions_dev_rw') then
+  if not exists (select 1 from pg_policies where policyname = 'sessions_dev_rw') then
     create policy sessions_dev_rw on public.sessions
       for all using (true) with check (true);
   end if;
-  if not exists (select 1 from pg_policies where polname = 'devices_dev_rw') then
+  if not exists (select 1 from pg_policies where policyname = 'devices_dev_rw') then
     create policy devices_dev_rw on public.devices
       for all using (true) with check (true);
   end if;
-  if not exists (select 1 from pg_policies where polname = 'items_dev_rw') then
+  if not exists (select 1 from pg_policies where policyname = 'items_dev_rw') then
     create policy items_dev_rw on public.items
       for all using (true) with check (true);
   end if;
