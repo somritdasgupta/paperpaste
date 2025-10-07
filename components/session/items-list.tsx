@@ -38,7 +38,11 @@ import {
   RefreshCw,
   Pause,
   Play,
+  Calendar,
+  User,
+  FileIcon,
 } from "lucide-react";
+import FilePreview from "./file-preview";
 import { marked } from "marked";
 import DOMPurify from "dompurify";
 
@@ -92,7 +96,7 @@ export default function ItemsList({ code }: { code: string }) {
   const [copiedItems, setCopiedItems] = useState<Set<string>>(new Set());
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [autoRefreshEnabled, setAutoRefreshEnabled] = useState(true);
-  const [autoRefreshInterval, setAutoRefreshInterval] = useState(5000); // 5 seconds default
+  const [autoRefreshInterval, setAutoRefreshInterval] = useState(3000); // 3 seconds default
 
   // Session dialog states
   const [sessionExpiredOpen, setSessionExpiredOpen] = useState(false);
@@ -217,7 +221,8 @@ export default function ItemsList({ code }: { code: string }) {
                 fileDownloadUrl = await createEncryptedFileDownloadUrl(
                   item.file_data_encrypted,
                   sessionKey,
-                  fileMimeType
+                  fileMimeType,
+                  fileName || undefined
                 );
               }
             } catch (e) {
@@ -502,7 +507,8 @@ export default function ItemsList({ code }: { code: string }) {
                   fileDownloadUrl = await createEncryptedFileDownloadUrl(
                     newItem.file_data_encrypted,
                     sessionKey,
-                    fileMimeType
+                    fileMimeType,
+                    fileName || undefined
                   );
                 }
               } catch (e) {
@@ -738,108 +744,135 @@ export default function ItemsList({ code }: { code: string }) {
     setAutoRefreshEnabled(!autoRefreshEnabled);
   };
 
+  const formatFileSize = (bytes: number) => {
+    if (bytes === 0) return "0 B";
+    const k = 1024;
+    const sizes = ["B", "KB", "MB", "GB"];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + " " + sizes[i];
+  };
+
+  const getFileType = (mimeType: string) => {
+    if (!mimeType) return "File";
+    if (mimeType.startsWith("image/")) return "Image";
+    if (mimeType.startsWith("video/")) return "Video";
+    if (mimeType.startsWith("audio/")) return "Audio";
+    if (mimeType.includes("pdf")) return "PDF";
+    if (mimeType.includes("text")) return "Text";
+    if (mimeType.includes("document")) return "Document";
+    if (mimeType.includes("spreadsheet")) return "Spreadsheet";
+    if (mimeType.includes("presentation")) return "Presentation";
+    return "File";
+  };
+
+  const getFileIcon = (mimeType?: string) => {
+    if (!mimeType)
+      return <FileText className="h-5 w-5 text-muted-foreground" />;
+
+    if (mimeType.startsWith("image/")) {
+      return <Image className="h-5 w-5 text-blue-500" />;
+    }
+    if (mimeType.startsWith("video/")) {
+      return <Play className="h-5 w-5 text-purple-500" />;
+    }
+    if (mimeType.startsWith("audio/")) {
+      return <Play className="h-5 w-5 text-green-500" />;
+    }
+    if (mimeType.includes("pdf")) {
+      return <FileText className="h-5 w-5 text-red-500" />;
+    }
+    if (
+      mimeType.includes("code") ||
+      mimeType.includes("javascript") ||
+      mimeType.includes("json")
+    ) {
+      return <Code className="h-5 w-5 text-yellow-500" />;
+    }
+
+    return <FileText className="h-5 w-5 text-muted-foreground" />;
+  };
+
   return (
     <div className="w-full">
-      {/* Header with status and refresh button */}
-      <div className="flex items-center justify-between gap-2 p-3 border-b border-border/50 overflow-x-auto">
-        <div className="flex items-center gap-2 flex-shrink-0">
-          <div className="flex items-center gap-1">
-        <div
-          className={`w-2 h-2 rounded-full transition-all duration-200 ${
-            connectionStatus === "connected"
-          ? `bg-green-500 ${
-              isRefreshing
-            ? "animate-shimmer-glow shadow-lg shadow-green-500/50"
-            : ""
-            }`
-          : connectionStatus === "connecting"
-          ? "bg-yellow-500 animate-pulse"
-          : "bg-red-500"
-          }`}
-        />
-          </div>
-          <span className="text-xs text-muted-foreground whitespace-nowrap">
-        {items.length > 0
-          ? `${items.length} item${items.length !== 1 ? "s" : ""}`
-          : "ready"}
-          </span>
-          <div className="flex items-center gap-1">
-        <Button
-          size="sm"
-          variant="ghost"
-          onClick={toggleAutoRefresh}
-          className="h-6 w-6 p-0 hover:bg-muted/50"
-          title={
-            autoRefreshEnabled
-          ? "Pause auto-refresh"
-          : "Resume auto-refresh"
-          }
-        >
-          {autoRefreshEnabled ? (
-            <Pause className="h-3 w-3" />
-          ) : (
-            <Play className="h-3 w-3" />
-          )}
-        </Button>
-        <Button
-          size="sm"
-          variant="ghost"
-          onClick={handleManualRefresh}
-          disabled={isRefreshing}
-          className={`h-6 w-6 p-0 hover:bg-muted/50 transition-all duration-200 ${
-            isRefreshing
-          ? "bg-primary/10 border border-primary/20 animate-shimmer-glow"
-          : ""
-          }`}
-          title="Refresh data"
-        >
-          <RefreshCw
-            className={`h-3 w-3 transition-all duration-200 ${
-          isRefreshing
-            ? "animate-spin text-primary scale-110"
-            : "hover:scale-110"
-            }`}
-          />
-        </Button>
+      {/* Clean minimal header */}
+      <div className="flex items-center justify-between p-4 border-b border-border/30">
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
+            <div
+              className={`w-2 h-2 rounded-full transition-all duration-200 ${
+                connectionStatus === "connected"
+                  ? `bg-green-500 ${isRefreshing ? "animate-pulse" : ""}`
+                  : connectionStatus === "connecting"
+                  ? "bg-yellow-500 animate-pulse"
+                  : "bg-red-500"
+              }`}
+            />
+            <span className="text-sm font-medium text-foreground">
+              {items.length > 0
+                ? `${items.length} ${items.length === 1 ? "Item" : "Items"}`
+                : "No Items"}
+            </span>
           </div>
         </div>
-        <div className="flex items-center gap-1 flex-shrink-0">
-          <span className="text-xs text-muted-foreground sm:inline whitespace-nowrap">
-        Auto-refresh:
-          </span>
-          <select
-        value={autoRefreshInterval}
-        onChange={(e) => setAutoRefreshInterval(Number(e.target.value))}
-        className="text-xs bg-background border border-border/50 rounded px-1 text-foreground hover:bg-muted/50 focus:outline-none focus:ring-2 focus:ring-primary/50"
-        title="Auto-refresh interval"
+
+        <div className="flex items-center gap-2">
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={toggleAutoRefresh}
+            className="h-8 w-8 p-0 hover:bg-muted/50"
+            title={
+              autoRefreshEnabled ? "Pause auto-refresh" : "Resume auto-refresh"
+            }
           >
-        <option className="bg-background text-foreground" value={3000}>
-          3s
-        </option>
-        <option className="bg-background text-foreground" value={5000}>
-          5s
-        </option>
-        <option className="bg-background text-foreground" value={10000}>
-          10s
-        </option>
-        <option className="bg-background text-foreground" value={15000}>
-          15s
-        </option>
-        <option className="bg-background text-foreground" value={30000}>
-          30s
-        </option>
+            {autoRefreshEnabled ? (
+              <Pause className="h-4 w-4" />
+            ) : (
+              <Play className="h-4 w-4" />
+            )}
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={handleManualRefresh}
+            disabled={isRefreshing}
+            className="h-8 w-8 p-0 hover:bg-muted/50"
+            title="Refresh data"
+          >
+            <RefreshCw
+              className={`h-4 w-4 transition-all duration-200 ${
+                isRefreshing ? "animate-spin text-primary" : ""
+              }`}
+            />
+          </Button>
+
+          <select
+            value={autoRefreshInterval}
+            onChange={(e) => setAutoRefreshInterval(Number(e.target.value))}
+            className="text-xs bg-background border border-border/50 rounded-md px-2 py-1 text-foreground hover:bg-muted/50 focus:outline-none focus:ring-1 focus:ring-primary"
+            title="Auto-refresh interval"
+          >
+            <option value={3000}>3s</option>
+            <option value={5000}>5s</option>
+            <option value={10000}>10s</option>
+            <option value={15000}>15s</option>
+            <option value={30000}>30s</option>
           </select>
         </div>
       </div>
 
       {items.length === 0 ? (
-        <div className="flex items-center justify-center h-32 text-muted-foreground">
-          <div className="text-center">
-            <div>No items yet. Share something to get started!</div>
+        <div className="flex items-center justify-center h-48 text-muted-foreground">
+          <div className="text-center space-y-2">
+            <FileText className="h-12 w-12 mx-auto opacity-50" />
+            <div className="text-lg font-medium">No items shared yet</div>
+            <div className="text-sm">
+              Share text, code, or files to get started
+            </div>
           </div>
         </div>
       ) : (
-        <div className="relative space-y-2 p-2 sm:p-3">
+        <div className="relative space-y-2 sm:space-y-3 p-3 sm:p-4">
           {/* Beautiful shimmer overlay during refresh */}
           {isRefreshing && (
             <div className="absolute inset-0 z-10 bg-gradient-to-r from-transparent via-white/20 to-transparent dark:via-white/10 animate-shimmer pointer-events-none rounded-lg">
@@ -861,70 +894,73 @@ export default function ItemsList({ code }: { code: string }) {
                     : ""
                 }`}
               >
-                <div className="p-2 sm:p-3">
-                  {/* Header with device info and timestamp */}
-                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-2">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <div className="flex items-center gap-1">
-                        {getDeviceIcon(item.device_name || "device")}
-                        <Badge
-                          variant={isOwnDevice ? "default" : "secondary"}
-                          className="text-xs px-2 py-0.5"
-                        >
-                          <span className="hidden sm:inline">
-                            {item.device_name || "Anonymous Device"}
-                            {isOwnDevice && " (You)"}
+                <div className="p-3 sm:p-4">
+                  {/* Compact Header */}
+                  <div className="flex items-center justify-between gap-3 mb-3">
+                    <div className="flex items-center gap-2 min-w-0">
+                      {getDeviceIcon(item.device_name || "device")}
+                      <span className="text-sm font-medium text-foreground truncate">
+                        {item.device_name || "Device"}
+                        {isOwnDevice && (
+                          <span className="text-muted-foreground ml-1">
+                            (You)
                           </span>
-                          <span className="sm:hidden">
-                            {(item.device_name || "Anonymous Device").length >
-                            12
-                              ? `${(
-                                  item.device_name || "Anonymous Device"
-                                ).substring(0, 12)}...`
-                              : item.device_name || "Anonymous Device"}
-                            {isOwnDevice && " (You)"}
-                          </span>
-                        </Badge>
-                      </div>
-                      <div className="flex items-center gap-1">
-                        {getContentIcon(item.kind)}
-                        <Badge
-                          variant="outline"
-                          className="text-xs px-2 py-0.5"
-                        >
-                          {item.kind.toUpperCase()}
-                        </Badge>
-                      </div>
+                        )}
+                      </span>
+                      <Badge
+                        variant="outline"
+                        className="text-xs h-5 px-1.5 capitalize ml-2"
+                      >
+                        {item.kind}
+                      </Badge>
                     </div>
-                    <div className="text-xs text-muted-foreground">
-                      {new Date(item.created_at).toLocaleTimeString()}
-                    </div>
+                    <span className="text-xs text-muted-foreground flex-shrink-0">
+                      {new Date(item.created_at).toLocaleTimeString([], {
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })}
+                    </span>
                   </div>
 
-                  {/* Content */}
+                  {/* File Content - Clean & Compact */}
                   {item.kind === "file" ? (
-                    <div className="space-y-2">
-                      <div className="flex items-center justify-between gap-2 p-3 bg-muted/30 rounded-lg">
-                        <div className="flex items-center gap-2 flex-1 min-w-0">
-                          <Download className="h-4 w-4 text-primary flex-shrink-0" />
-                          <div className="flex-1 min-w-0">
-                            <div className="font-medium text-primary truncate text-sm">
-                              {item.file_name ||
-                                item.content ||
-                                "Encrypted File"}
-                            </div>
-                            {item.file_size && (
-                              <div className="text-xs text-muted-foreground">
-                                {(item.file_size / 1024).toFixed(1)} KB
-                                {item.file_mime_type &&
-                                  ` • ${item.file_mime_type}`}
-                              </div>
-                            )}
-                          </div>
+                    <div className="flex items-center gap-3 p-3 bg-muted/30 rounded-lg">
+                      <div className="flex-shrink-0">
+                        {getFileIcon(item.file_mime_type)}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="font-medium text-foreground truncate text-sm">
+                          {item.file_name || "Unknown File"}
+                        </div>
+                        <div className="flex items-center gap-2 mt-0.5 text-xs text-muted-foreground">
+                          {item.file_size && (
+                            <span>{formatFileSize(item.file_size)}</span>
+                          )}
+                          {item.file_mime_type && item.file_size && (
+                            <span>•</span>
+                          )}
+                          {item.file_mime_type && (
+                            <span>{getFileType(item.file_mime_type)}</span>
+                          )}
                         </div>
                       </div>
-                      {/* Action buttons below file info */}
-                      <div className="flex justify-end gap-1">
+                      <div className="flex items-center gap-1 flex-shrink-0">
+                        <FilePreview
+                          fileName={item.file_name || "file"}
+                          fileUrl={item.file_download_url || ""}
+                          mimeType={item.file_mime_type || ""}
+                          size={item.file_size || 0}
+                          onDownload={() => {
+                            if (item.file_download_url) {
+                              const link = document.createElement("a");
+                              link.href = item.file_download_url;
+                              link.download = item.file_name || "download";
+                              document.body.appendChild(link);
+                              link.click();
+                              document.body.removeChild(link);
+                            }
+                          }}
+                        />
                         {item.file_download_url && (
                           <Button
                             size="sm"
@@ -937,52 +973,26 @@ export default function ItemsList({ code }: { code: string }) {
                               link.click();
                               document.body.removeChild(link);
                             }}
-                            className="h-8 px-3 hover:bg-background text-xs"
+                            className="h-8 w-8 p-0 hover:bg-muted/50"
                             title="Download file"
                           >
-                            <Download className="h-3 w-3 mr-1" />
-                            Download
+                            <Download className="h-4 w-4" />
                           </Button>
                         )}
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={() =>
-                            copyToClipboard(
-                              item.file_name || "Encrypted File",
-                              item.id
-                            )
-                          }
-                          className="h-8 px-3 hover:bg-background text-xs"
-                          title="Copy filename"
-                        >
-                          {isCopied ? (
-                            <>
-                              <Check className="h-3 w-3 mr-1 text-green-500" />
-                              Copied
-                            </>
-                          ) : (
-                            <>
-                              <Copy className="h-3 w-3 mr-1" />
-                              Copy
-                            </>
-                          )}
-                        </Button>
                       </div>
                     </div>
                   ) : (
-                    <div className="space-y-2">
-                      {/* Content area with proper mobile sizing */}
-                      <div className="w-full">
+                    <div>
+                      <div className="relative group">
                         {item.kind === "code" ? (
-                          <pre className="whitespace-pre-wrap text-xs sm:text-sm p-2 sm:p-3 rounded-lg border-0 bg-muted/50 font-mono text-foreground overflow-x-auto">
+                          <pre className="p-3 rounded-lg bg-muted/30 text-xs sm:text-sm font-mono text-foreground overflow-x-auto scrollbar-thin">
                             {isLongContent && !isExpanded
                               ? truncateContent(item.content || "")
                               : item.content}
                           </pre>
                         ) : shouldRenderAsMarkdown(item.content || "") ? (
                           <div
-                            className="prose prose-xs sm:prose-sm max-w-none p-2 sm:p-3 rounded-lg border-0 bg-muted/30 text-foreground prose-headings:text-foreground prose-p:text-foreground prose-strong:text-foreground prose-code:text-xs prose-code:text-foreground prose-pre:bg-muted prose-pre:text-xs prose-blockquote:text-muted-foreground [&>*]:break-words [&>pre]:overflow-x-auto [&>pre]:max-w-full [&>code]:text-xs [&>p]:text-xs sm:[&>p]:text-sm [&>h1]:text-sm sm:[&>h1]:text-base [&>h2]:text-sm sm:[&>h2]:text-base [&>h3]:text-xs sm:[&>h3]:text-sm [&>ul]:text-xs sm:[&>ul]:text-sm [&>ol]:text-xs sm:[&>ol]:text-sm"
+                            className="prose prose-xs sm:prose-sm max-w-none p-3 rounded-lg bg-muted/30 text-foreground prose-headings:text-foreground prose-p:text-foreground prose-strong:text-foreground prose-code:text-foreground prose-pre:bg-muted prose-blockquote:text-muted-foreground"
                             dangerouslySetInnerHTML={{
                               __html: renderMarkdown(
                                 isLongContent && !isExpanded
@@ -992,18 +1002,18 @@ export default function ItemsList({ code }: { code: string }) {
                             }}
                           />
                         ) : (
-                          <pre className="whitespace-pre-wrap text-xs sm:text-sm p-2 sm:p-3 rounded-lg border-0 bg-muted/30 text-foreground overflow-x-auto break-words">
+                          <div className="p-3 rounded-lg bg-muted/30 text-sm text-foreground whitespace-pre-wrap break-words">
                             {isLongContent && !isExpanded
                               ? truncateContent(item.content || "")
                               : item.content}
-                          </pre>
+                          </div>
                         )}
                       </div>
 
-                      {/* Bottom info and actions bar */}
-                      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 text-xs text-muted-foreground">
-                        <div className="flex items-center gap-2 sm:gap-3">
-                          <span>{item.content?.length || 0} characters</span>
+                      {/* Compact Action bar */}
+                      <div className="flex items-center justify-between gap-2 mt-2 pt-2 border-t border-border/30">
+                        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                          <span>{item.content?.length || 0} chars</span>
                           {isLongContent && (
                             <Button
                               size="sm"
@@ -1013,39 +1023,31 @@ export default function ItemsList({ code }: { code: string }) {
                             >
                               {isExpanded ? (
                                 <>
-                                  <ChevronDown className="h-3 w-3 mr-1" />
-                                  Collapse
+                                  <ChevronDown className="h-3 w-3" />
+                                  <span className="ml-1">Less</span>
                                 </>
                               ) : (
                                 <>
-                                  <ChevronRight className="h-3 w-3 mr-1" />
-                                  Expand
+                                  <ChevronRight className="h-3 w-3" />
+                                  <span className="ml-1">More</span>
                                 </>
                               )}
                             </Button>
                           )}
                         </div>
-
-                        {/* Copy button moved to bottom right */}
                         <Button
                           size="sm"
                           variant="ghost"
                           onClick={() =>
                             copyToClipboard(item.content || "", item.id)
                           }
-                          className="h-8 px-3 hover:bg-muted/50 text-xs self-end sm:self-auto"
+                          className="h-8 w-8 p-0 hover:bg-muted/50"
                           title="Copy content"
                         >
                           {isCopied ? (
-                            <>
-                              <Check className="h-3 w-3 mr-1 text-green-500" />
-                              Copied
-                            </>
+                            <Check className="h-4 w-4 text-green-500" />
                           ) : (
-                            <>
-                              <Copy className="h-3 w-3 mr-1" />
-                              Copy
-                            </>
+                            <Copy className="h-4 w-4" />
                           )}
                         </Button>
                       </div>

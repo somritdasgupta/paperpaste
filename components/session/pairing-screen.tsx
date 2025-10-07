@@ -233,16 +233,46 @@ export default function PairingScreen({
     }
   };
 
-  const deviceIcon = () => {
-    const userAgent = navigator.userAgent.toLowerCase();
-    if (/mobile|android|iphone|ipad/.test(userAgent)) {
-      return <Smartphone className="h-8 w-8" />;
-    } else if (/tablet|ipad/.test(userAgent)) {
-      return <Tablet className="h-8 w-8" />;
-    } else if (/mac|windows|linux/.test(userAgent)) {
-      return <Laptop className="h-8 w-8" />;
+  // NOTE: device icon is determined on the client after mount. See
+  // renderDetectedDeviceIcon() below.
+
+  // Detect device type on client; start with a neutral default so server
+  // and client initial HTML match.
+  const [detectedDeviceType, setDetectedDeviceType] = useState<
+    "smartphone" | "tablet" | "laptop" | "monitor"
+  >("monitor");
+
+  useEffect(() => {
+    try {
+      const ua = navigator.userAgent.toLowerCase();
+      if (/mobile|android|iphone/.test(ua)) {
+        setDetectedDeviceType("smartphone");
+        return;
+      }
+      if (/tablet|ipad/.test(ua)) {
+        setDetectedDeviceType("tablet");
+        return;
+      }
+      if (/mac|windows|linux/.test(ua)) {
+        setDetectedDeviceType("laptop");
+        return;
+      }
+    } catch (e) {
+      // if navigator isn't available, keep default
     }
-    return <Monitor className="h-8 w-8" />;
+  }, []);
+
+  const renderDetectedDeviceIcon = () => {
+    switch (detectedDeviceType) {
+      case "smartphone":
+        return <Smartphone className="h-8 w-8" />;
+      case "tablet":
+        return <Tablet className="h-8 w-8" />;
+      case "laptop":
+        return <Laptop className="h-8 w-8" />;
+      default:
+        return <Monitor className="h-8 w-8" />;
+    }
   };
 
   return (
@@ -309,7 +339,7 @@ export default function PairingScreen({
           <Card className="p-8 border-2 hover:border-primary/20 transition-colors">
             <CardHeader className="pb-6">
               <CardTitle className="flex items-center justify-center gap-2 text-2xl">
-                {deviceIcon()}
+                {renderDetectedDeviceIcon()}
                 Connect This Device
               </CardTitle>
               <CardDescription className="text-base text-center">

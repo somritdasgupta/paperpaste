@@ -27,11 +27,78 @@ import {
 
 type ItemType = "text" | "code" | "file";
 
+// File size limits and supported types
+const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB max for stability
+const SUPPORTED_FILE_TYPES = {
+  // Microsoft Office
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
+    ".docx",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": ".xlsx",
+  "application/vnd.openxmlformats-officedocument.presentationml.presentation":
+    ".pptx",
+  "application/msword": ".doc",
+  "application/vnd.ms-excel": ".xls",
+  "application/vnd.ms-powerpoint": ".ppt",
+
+  // Images
+  "image/jpeg": ".jpg",
+  "image/png": ".png",
+  "image/gif": ".gif",
+  "image/webp": ".webp",
+  "image/svg+xml": ".svg",
+  "image/bmp": ".bmp",
+
+  // Audio
+  "audio/mpeg": ".mp3",
+  "audio/wav": ".wav",
+  "audio/ogg": ".ogg",
+  "audio/mp4": ".m4a",
+  "audio/webm": ".webm",
+
+  // Video
+  "video/mp4": ".mp4",
+  "video/webm": ".webm",
+  "video/ogg": ".ogv",
+  "video/avi": ".avi",
+  "video/mov": ".mov",
+
+  // Documents
+  "application/pdf": ".pdf",
+  "text/plain": ".txt",
+  "text/csv": ".csv",
+  "application/rtf": ".rtf",
+
+  // Code files
+  "text/javascript": ".js",
+  "application/json": ".json",
+  "text/html": ".html",
+  "text/css": ".css",
+  "application/xml": ".xml",
+  "text/x-python": ".py",
+  "text/x-java-source": ".java",
+  "text/x-c": ".c",
+  "text/x-c++": ".cpp",
+  "text/x-csharp": ".cs",
+  "text/x-php": ".php",
+  "text/x-ruby": ".rb",
+  "text/x-go": ".go",
+  "text/x-rust": ".rs",
+  "text/x-swift": ".swift",
+  "text/x-kotlin": ".kt",
+  "text/x-scala": ".scala",
+  "text/x-sql": ".sql",
+  "text/markdown": ".md",
+  "text/yaml": ".yml",
+  "application/x-yaml": ".yaml",
+  "application/toml": ".toml",
+};
+
 export default function ClipboardInput({ code }: { code: string }) {
   const [type, setType] = useState<ItemType>("text");
   const [text, setText] = useState("");
   const [file, setFile] = useState<File | null>(null);
   const [busy, setBusy] = useState(false);
+  const [fileError, setFileError] = useState<string | null>(null);
   const [isFrozen, setIsFrozen] = useState(false);
   const [canView, setCanView] = useState(true);
   const [sessionKey, setSessionKey] = useState<CryptoKey | null>(null);
@@ -98,6 +165,48 @@ export default function ClipboardInput({ code }: { code: string }) {
 
     const { error } = await supabase.from("items").insert(payload);
     return { error };
+  };
+
+  const validateFile = (file: File): string | null => {
+    // Check file size
+    if (file.size > MAX_FILE_SIZE) {
+      return `File size (${(file.size / 1024 / 1024).toFixed(
+        2
+      )}MB) exceeds maximum limit of ${MAX_FILE_SIZE / 1024 / 1024}MB`;
+    }
+
+    // Check if file type is supported
+    if (!SUPPORTED_FILE_TYPES[file.type as keyof typeof SUPPORTED_FILE_TYPES]) {
+      // Check by file extension as fallback
+      const extension = "." + file.name.split(".").pop()?.toLowerCase();
+      const isSupportedByExtension = Object.values(
+        SUPPORTED_FILE_TYPES
+      ).includes(extension as any);
+
+      if (!isSupportedByExtension) {
+        return `File type "${
+          file.type || "unknown"
+        }" is not supported. Supported formats: Microsoft Office, Images, Audio, Video, Documents, and Code files.`;
+      }
+    }
+
+    return null;
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const selectedFile = e.target.files?.[0] || null;
+    setFileError(null);
+
+    if (selectedFile) {
+      const error = validateFile(selectedFile);
+      if (error) {
+        setFileError(error);
+        setFile(null);
+        return;
+      }
+    }
+
+    setFile(selectedFile);
   };
 
   const submit = async (e?: React.FormEvent) => {
@@ -203,18 +312,18 @@ export default function ClipboardInput({ code }: { code: string }) {
 
       <form
         onSubmit={submit}
-        className={`flex flex-col gap-3 ${
+        className={`flex flex-col gap-2 sm:gap-3 ${
           isFrozen ? "opacity-50 pointer-events-none" : ""
         }`}
       >
-        <div className="flex gap-1.5 sm:gap-2">
+        <div className="flex gap-1 sm:gap-2">
           <Button
             type="button"
             variant={type === "text" ? "default" : "secondary"}
             disabled={isFrozen}
             onClick={() => setType("text")}
             size="sm"
-            className="flex-1 text-xs sm:text-sm py-2"
+            className="flex-1 text-xs sm:text-sm py-1.5 sm:py-2 px-2 sm:px-3"
           >
             <Type className="h-4 w-4" />
             Text
@@ -224,7 +333,7 @@ export default function ClipboardInput({ code }: { code: string }) {
             variant={type === "code" ? "default" : "secondary"}
             onClick={() => setType("code")}
             size="sm"
-            className="flex-1 text-xs sm:text-sm py-2"
+            className="flex-1 text-xs sm:text-sm py-1.5 sm:py-2 px-2 sm:px-3"
           >
             <Code className="h-4 w-4" />
             Code
@@ -234,7 +343,7 @@ export default function ClipboardInput({ code }: { code: string }) {
             variant={type === "file" ? "default" : "secondary"}
             onClick={() => setType("file")}
             size="sm"
-            className="flex-1 text-xs sm:text-sm py-2"
+            className="flex-1 text-xs sm:text-sm py-1.5 sm:py-2 px-2 sm:px-3"
           >
             <FileText className="h-4 w-4" />
             File
@@ -242,50 +351,99 @@ export default function ClipboardInput({ code }: { code: string }) {
         </div>
 
         {type === "file" ? (
-          <Input
-            type="file"
-            onChange={(e) => setFile(e.target.files?.[0] || null)}
-          />
+          <div className="space-y-2">
+            <Input
+              type="file"
+              onChange={handleFileChange}
+              accept={Object.keys(SUPPORTED_FILE_TYPES).join(",")}
+              className={fileError ? "border-destructive" : ""}
+            />
+            {fileError && (
+              <div className="text-sm text-destructive bg-destructive/10 p-2 rounded-md">
+                {fileError}
+              </div>
+            )}
+            {file && !fileError && (
+              <div className="text-sm text-muted-foreground bg-muted/30 p-2 rounded-md">
+                <div className="flex justify-between items-center">
+                  <span className="truncate">{file.name}</span>
+                  <span className="text-xs ml-2 flex-shrink-0">
+                    {(file.size / 1024 / 1024).toFixed(2)}MB
+                  </span>
+                </div>
+                <div className="text-xs mt-1 text-muted-foreground">
+                  {file.type || "Unknown type"} • Max:{" "}
+                  {MAX_FILE_SIZE / 1024 / 1024}MB
+                </div>
+              </div>
+            )}
+            {/* Send button for files */}
+            <Button
+              type="submit"
+              disabled={busy || isFrozen || !sessionKey || !file || !!fileError}
+              className="w-full font-medium"
+              size="default"
+            >
+              {busy
+                ? "Encrypting & Uploading..."
+                : sessionKey
+                ? "Share File"
+                : "Loading..."}
+            </Button>
+          </div>
         ) : (
-          <Textarea
-            placeholder={
-              type === "code"
-                ? "Paste your code here...\n\nIndentation, spacing, and formatting will be preserved."
-                : "Paste your text here...\n\nMarkdown formatting is supported."
-            }
-            value={text}
-            onChange={(e) => setText(e.target.value)}
-            className={`resize-none transition-all duration-200 ${
-              type === "code"
-                ? "font-mono text-xs sm:text-sm bg-muted/30 leading-relaxed"
-                : "font-sans text-sm leading-normal"
-            }`}
-            style={{
-              height: "clamp(200px, 50vh, 400px)",
-              minHeight: "200px",
-            }}
-          />
+          <div className="relative">
+            <Textarea
+              placeholder={
+                type === "code"
+                  ? "Paste your code here...\n\nIndentation, spacing, and formatting will be preserved.\n\nPress Ctrl+Enter (Cmd+Enter on Mac) to share."
+                  : "Paste your text here...\n\nMarkdown formatting is supported.\n\nPress Ctrl+Enter (Cmd+Enter on Mac) to share."
+              }
+              value={text}
+              onChange={(e) => setText(e.target.value)}
+              onKeyDown={(e) => {
+                if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
+                  e.preventDefault();
+                  submit();
+                }
+              }}
+              className={`resize-none transition-all duration-200 pr-12 ${
+                type === "code"
+                  ? "font-mono text-xs sm:text-sm bg-muted/30 leading-relaxed"
+                  : "font-sans text-sm leading-normal"
+              }`}
+              style={{
+                height: "clamp(200px, 50vh, 400px)",
+                minHeight: "200px",
+              }}
+            />
+            {/* Inline Send Button */}
+            <Button
+              type="submit"
+              disabled={busy || isFrozen || !sessionKey || !text.trim()}
+              size="sm"
+              className="absolute bottom-3 right-3 h-8 px-3 font-medium shadow-sm"
+              title="Send (Ctrl+Enter)"
+            >
+              {busy ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Send className="h-4 w-4" />
+              )}
+            </Button>
+          </div>
         )}
 
-        <div className="flex flex-col sm:flex-row gap-2 sm:justify-end">
-          <Button
-            type="submit"
-            disabled={
-              busy ||
-              isFrozen ||
-              !sessionKey ||
-              (type === "file" ? !file : !text.trim())
-            }
-            className="w-full sm:w-auto px-6 py-2.5 font-medium"
-            size="default"
-          >
-            {busy
-              ? "Encrypting & Uploading..."
-              : sessionKey
-              ? "Share"
-              : "Loading..."}
-          </Button>
-        </div>
+        {/* Keyboard shortcut info */}
+        {type !== "file" && (
+          <div className="text-xs text-muted-foreground text-center">
+            Press{" "}
+            <kbd className="px-1.5 py-0.5 bg-muted rounded text-xs">
+              Ctrl+Enter
+            </kbd>{" "}
+            to share
+          </div>
+        )}
       </form>
     </div>
   );

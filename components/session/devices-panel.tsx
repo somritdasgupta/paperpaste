@@ -64,9 +64,7 @@ export default function DevicesPanel({ code }: { code: string }) {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState<{ [key: string]: boolean }>({});
   const [sessionKey, setSessionKey] = useState<CryptoKey | null>(null);
-  const [showKillConfirm, setShowKillConfirm] = useState(false);
   const [showTransferHost, setShowTransferHost] = useState(false);
-  const [killConfirmCode, setKillConfirmCode] = useState("");
   const [selectedNewHost, setSelectedNewHost] = useState("");
   const [expandedDevices, setExpandedDevices] = useState<Set<string>>(
     new Set()
@@ -74,10 +72,33 @@ export default function DevicesPanel({ code }: { code: string }) {
   const [refreshTrigger, setRefreshTrigger] = useState(0);
   const [autoRefreshInterval] = useState(3000); // 3 seconds default
   const [isHost, setIsHost] = useState(false);
+  const [redirectCountdown, setRedirectCountdown] = useState<number | null>(
+    null
+  );
+  const [redirectReason, setRedirectReason] = useState<string>("");
 
   useEffect(() => {
     setIsHost(localStorage.getItem(`pp-host-${code}`) === "1");
   }, [code]);
+
+  const startRedirectCountdown = (reason: string) => {
+    setRedirectReason(reason);
+    setRedirectCountdown(5);
+
+    const countdownInterval = setInterval(() => {
+      setRedirectCountdown((prev) => {
+        if (prev === null || prev <= 1) {
+          clearInterval(countdownInterval);
+          // Clear local storage and redirect
+          localStorage.removeItem(`pp-host-${code}`);
+          localStorage.removeItem(`pp-joined-${code}`);
+          window.location.href = "/";
+          return null;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+  };
 
   const toggleDeviceExpansion = (deviceId: string) => {
     const newExpanded = new Set(expandedDevices);
@@ -214,14 +235,41 @@ export default function DevicesPanel({ code }: { code: string }) {
         }
       });
 
-    // Listen for session termination
+    // Listen for session termination and device kicks
     const killChannel = supabase
       .channel(`session-kill-listener-${code}`)
       .on("broadcast", { event: "session_killed" }, (payload) => {
         if (payload.payload.code === code) {
-          startKillCountdown();
+          startRedirectCountdown("Session terminated by host");
         }
       })
+      .on("broadcast", { event: "device_kicked" }, (payload) => {
+        if (payload.payload.device_id === selfId) {
+          startRedirectCountdown("You have been removed from the session");
+        }
+      })
+      .subscribe();
+
+    // Also listen for direct device deletion
+    const deviceChannel = supabase
+      .channel(`device-listener-${selfId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "DELETE",
+          schema: "public",
+          table: "devices",
+          filter: `device_id=eq.${selfId}`,
+        },
+        (payload) => {
+          // Only trigger if it's for this session
+          if (payload.old.session_code === code) {
+            startRedirectCountdown(
+              "Your device has been removed from the session"
+            );
+          }
+        }
+      )
       .subscribe();
 
     // Start heartbeat system - update every 30 seconds
@@ -236,6 +284,7 @@ export default function DevicesPanel({ code }: { code: string }) {
       if (autoRefreshIntervalId) clearInterval(autoRefreshIntervalId);
       supabase.removeChannel(channel);
       supabase.removeChannel(killChannel);
+      supabase.removeChannel(deviceChannel);
     };
   }, [supabase, code, sessionKey, refreshTrigger, autoRefreshInterval]);
 
@@ -243,6 +292,13 @@ export default function DevicesPanel({ code }: { code: string }) {
     if (!supabase) return;
     setLoading((prev) => ({ ...prev, [deviceId]: true }));
     try {
+      // Broadcast kick event before deleting
+      await supabase.channel(`session-kill-listener-${code}`).send({
+        type: "broadcast",
+        event: "device_kicked",
+        payload: { device_id: deviceId, code },
+      });
+
       const { error } = await supabase
         .from("devices")
         .delete()
@@ -372,54 +428,19 @@ export default function DevicesPanel({ code }: { code: string }) {
     }
   };
 
-  const killSession = async () => {
-    if (!supabase || killConfirmCode !== code) return;
-
-    setLoading((prev) => ({ ...prev, killSession: true }));
-    try {
-      // Delete all items
-      await supabase.from("items").delete().eq("session_code", code);
-
-      // Delete all devices
-      await supabase.from("devices").delete().eq("session_code", code);
-
-      // Delete session
-      await supabase.from("sessions").delete().eq("code", code);
-
-      // Broadcast session termination
-      await supabase.channel(`session-kill-${code}`).send({
-        type: "broadcast",
-        event: "session_killed",
-        payload: { code },
-      });
-
-      // Start countdown and redirect
-      startKillCountdown();
-    } catch (e: any) {
-      setError(e?.message || "Failed to kill session.");
-      setLoading((prev) => ({ ...prev, killSession: false }));
-    }
-  };
-
-  const startKillCountdown = () => {
-    let count = 5;
-    const countdownInterval = setInterval(() => {
-      if (count <= 0) {
-        clearInterval(countdownInterval);
-        window.location.href = "/";
-        return;
-      }
-
-      // Show countdown in UI
-      setError(`Session terminated by host. Redirecting in ${count}...`);
-      count--;
-    }, 1000);
-  };
-
   if (!supabase) return null;
 
   return (
     <div>
+      {redirectCountdown !== null && (
+        <div className="mb-3 text-sm text-destructive bg-destructive/10 border border-destructive/20 rounded-md p-3 text-center">
+          <div className="font-medium">{redirectReason}</div>
+          <div className="text-xs mt-1">
+            Redirecting to home in {redirectCountdown} seconds...
+          </div>
+        </div>
+      )}
+
       {error && (
         <div className="mb-3 text-sm text-destructive bg-destructive/10 border border-destructive/20 rounded-md p-2">
           {error}
@@ -437,7 +458,7 @@ export default function DevicesPanel({ code }: { code: string }) {
             return (
               <li
                 key={d.id}
-                className="bg-card border rounded-xl p-4 hover:shadow-md transition-all duration-200"
+                className="bg-card border rounded-xl p-2 sm:p-4 hover:shadow-md transition-all duration-200"
               >
                 {/* Main Device Info Row */}
                 <div className="flex items-center justify-between gap-3">
@@ -462,13 +483,11 @@ export default function DevicesPanel({ code }: { code: string }) {
                           {d.device_id === selfId && (
                             <span className="bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300 text-xs px-2 py-0.5 rounded-full font-medium flex items-center gap-1">
                               <UserCheck className="h-3 w-3" />
-                              You
                             </span>
                           )}
                           {d.is_host && (
                             <span className="bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-300 text-xs px-2 py-0.5 rounded-full font-medium flex items-center gap-1">
                               <Crown className="h-3 w-3" />
-                              Host
                             </span>
                           )}
                           {d.is_frozen && (
@@ -511,14 +530,14 @@ export default function DevicesPanel({ code }: { code: string }) {
 
                 {/* Expanded Details */}
                 {isExpanded && (
-                  <div className="mt-4 pt-4 border-t space-y-3">
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                  <div className="mt-3 pt-3 border-t space-y-2 sm:space-y-3">
+                    <div className="grid grid-cols-1 gap-2 sm:gap-3 text-xs">
                       <div className="space-y-2">
                         <div className="flex items-center gap-2 text-muted-foreground">
                           <Info className="h-3 w-3" />
                           <span className="font-medium">Device Details</span>
                         </div>
-                        <div className="pl-5 space-y-1">
+                        <div className="pl-3 sm:pl-5 space-y-1">
                           <div>
                             <span className="text-xs text-muted-foreground">
                               Device ID:
@@ -542,7 +561,7 @@ export default function DevicesPanel({ code }: { code: string }) {
                           <Globe className="h-3 w-3" />
                           <span className="font-medium">Connection Info</span>
                         </div>
-                        <div className="pl-5 space-y-1">
+                        <div className="pl-3 sm:pl-5 space-y-1">
                           <div>
                             <span className="text-xs text-muted-foreground">
                               Status:
@@ -565,70 +584,51 @@ export default function DevicesPanel({ code }: { code: string }) {
                   </div>
                 )}
 
-                {/* Action Buttons Row */}
-                <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap justify-end sm:justify-start mt-3 pt-3 border-t">
-                  {/* Leave button for current user */}
-                  {d.device_id === selfId && (
+                {/* Action Buttons Row - Only for host controls */}
+                {isHost && d.device_id !== selfId && (
+                  <div className="flex items-center gap-1 sm:gap-2 flex-wrap justify-end sm:justify-start mt-2 pt-2 sm:mt-3 sm:pt-3 border-t">
+                    {/* Host controls for other devices */}
                     <Button
                       size="sm"
-                      variant="outline"
+                      variant={d.is_frozen ? "default" : "outline"}
                       onClick={() =>
-                        leaveSession(d.device_id, d.is_host || false)
+                        toggleFreeze(d.device_id, d.is_frozen || false)
                       }
-                      disabled={loading[`leave-${d.device_id}`]}
-                      className="text-xs px-2 py-1 border-orange-300 text-orange-700 hover:bg-orange-50"
+                      disabled={loading[`freeze-${d.device_id}`]}
+                      className="text-xs px-2 py-1"
                     >
-                      {loading[`leave-${d.device_id}`]
+                      {loading[`freeze-${d.device_id}`]
                         ? "..."
-                        : "Leave Session"}
+                        : d.is_frozen
+                        ? "Unfreeze"
+                        : "Freeze"}
                     </Button>
-                  )}
-
-                  {/* Host controls for other devices */}
-                  {isHost && d.device_id !== selfId && (
-                    <>
-                      <Button
-                        size="sm"
-                        variant={d.is_frozen ? "default" : "outline"}
-                        onClick={() =>
-                          toggleFreeze(d.device_id, d.is_frozen || false)
-                        }
-                        disabled={loading[`freeze-${d.device_id}`]}
-                        className="text-xs px-2 py-1"
-                      >
-                        {loading[`freeze-${d.device_id}`]
-                          ? "..."
-                          : d.is_frozen
-                          ? "Unfreeze"
-                          : "Freeze"}
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() =>
-                          toggleView(d.device_id, d.can_view !== false)
-                        }
-                        disabled={loading[`view-${d.device_id}`]}
-                        className="text-xs px-2 py-1"
-                      >
-                        {loading[`view-${d.device_id}`]
-                          ? "..."
-                          : d.can_view === false
-                          ? "Show"
-                          : "Hide"}
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="destructive"
-                        onClick={() => kick(d.device_id)}
-                        disabled={loading[d.device_id]}
-                        className="text-xs px-2 py-1"
-                      >
-                        {loading[d.device_id] ? "..." : "Remove"}
-                      </Button>
-                    </>
-                  )}
-                </div>
+                    <Button
+                      size="sm"
+                      variant={d.can_view === false ? "default" : "outline"}
+                      onClick={() =>
+                        toggleView(d.device_id, d.can_view !== false)
+                      }
+                      disabled={loading[`view-${d.device_id}`]}
+                      className="text-xs px-2 py-1"
+                    >
+                      {loading[`view-${d.device_id}`]
+                        ? "..."
+                        : d.can_view === false
+                        ? "Show"
+                        : "Hide"}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="destructive"
+                      onClick={() => kick(d.device_id)}
+                      disabled={loading[d.device_id]}
+                      className="text-xs px-2 py-1"
+                    >
+                      {loading[d.device_id] ? "..." : "Remove"}
+                    </Button>
+                  </div>
+                )}
               </li>
             );
           })}
@@ -679,49 +679,6 @@ export default function DevicesPanel({ code }: { code: string }) {
               disabled={!selectedNewHost || loading.transferHost}
             >
               {loading.transferHost ? "Transferring..." : "Transfer & Leave"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Kill Session Dialog */}
-      <Dialog open={showKillConfirm} onOpenChange={setShowKillConfirm}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Kill Session</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4">
-            <p className="text-sm text-muted-foreground">
-              This will permanently delete the session and all its data. All
-              connected devices will be disconnected.
-            </p>
-            <p className="text-sm font-medium text-destructive">
-              Type the session code{" "}
-              <code className="bg-muted px-1 rounded">{code}</code> to confirm:
-            </p>
-            <Input
-              value={killConfirmCode}
-              onChange={(e) => setKillConfirmCode(e.target.value)}
-              placeholder="Enter session code"
-              className="font-mono"
-            />
-          </div>
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => {
-                setShowKillConfirm(false);
-                setKillConfirmCode("");
-              }}
-            >
-              Cancel
-            </Button>
-            <Button
-              variant="destructive"
-              onClick={killSession}
-              disabled={killConfirmCode !== code || loading.killSession}
-            >
-              {loading.killSession ? "Killing Session..." : "Kill Session"}
             </Button>
           </DialogFooter>
         </DialogContent>

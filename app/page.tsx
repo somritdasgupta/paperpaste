@@ -1,7 +1,7 @@
 "use client";
 import JoinForm from "@/components/session/join-form";
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useState, useEffect } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { QRScanner } from "@/components/qr-scanner";
@@ -30,9 +30,24 @@ function EnvBanner() {
   );
 }
 
+interface JoinFormProps {
+  prefilledCode?: string | null;
+}
+
 export default function HomePage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [scanOpen, setScanOpen] = useState(false);
+  const [prefilledCode, setPrefilledCode] = useState<string | null>(null);
+
+  useEffect(() => {
+    const code = searchParams.get("code");
+    const action = searchParams.get("action");
+
+    if (code && action === "create") {
+      setPrefilledCode(code);
+    }
+  }, [searchParams]);
 
   const handleQrDetected = (text: string) => {
     try {
@@ -87,7 +102,7 @@ export default function HomePage() {
           <div className="grid lg:grid-cols-1 gap-8">
             <Card className="p-4 sm:p-8 lg:p-12 text-center border-2 hover:border-primary/20 transition-colors">
               <CardContent className="space-y-6 sm:space-y-8">
-                <JoinForm />
+                <JoinForm prefilledCode={prefilledCode} />
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-center gap-4">
                   <Button
                     type="button"

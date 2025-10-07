@@ -14,7 +14,11 @@ function randomCode(): string {
   return Math.floor(1000000 + Math.random() * 9000000).toString();
 }
 
-export default function JoinForm() {
+interface JoinFormProps {
+  prefilledCode?: string | null;
+}
+
+export default function JoinForm({ prefilledCode }: JoinFormProps) {
   const router = useRouter();
   const [digits, setDigits] = useState<string[]>(["", "", "", "", "", "", ""]);
   const [isValidating, setIsValidating] = useState(false);
@@ -70,6 +74,11 @@ export default function JoinForm() {
   const onCreate = () => {
     const newCode = randomCode();
     router.push(`/session/${newCode}?new=1`);
+  };
+
+  const onCreateWithCode = (code?: string | null) => {
+    const useCode = code && /^\d{7}$/.test(code) ? code : randomCode();
+    router.push(`/session/${useCode}?new=1`);
   };
 
   const setDigit = (index: number, val: string) => {
@@ -142,6 +151,13 @@ export default function JoinForm() {
     }
   }, [digits]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // If a prefilled code is provided, populate the digits on mount
+  useEffect(() => {
+    if (prefilledCode && /^\d{7}$/.test(prefilledCode)) {
+      setDigits(prefilledCode.split(""));
+    }
+  }, [prefilledCode]);
+
   return (
     <form onSubmit={onJoin} className="flex flex-col gap-4 sm:gap-6">
       <div className="grid grid-cols-7 gap-2 sm:gap-3 max-w-sm sm:max-w-md mx-auto">
@@ -201,7 +217,7 @@ export default function JoinForm() {
         <Button
           type="button"
           variant="secondary"
-          onClick={onCreate}
+          onClick={() => onCreateWithCode(prefilledCode)}
           className="w-full sm:flex-1"
           disabled={isValidating}
         >

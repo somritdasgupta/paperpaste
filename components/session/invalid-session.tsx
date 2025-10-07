@@ -9,7 +9,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { AlertCircle, Home, RotateCcw } from "lucide-react";
+import { AlertCircle, Home, RotateCcw, Plus } from "lucide-react";
 
 interface InvalidSessionProps {
   code: string;
@@ -27,6 +27,11 @@ export default function InvalidSession({
     errorMessage.includes("not found") || errorMessage.includes("expired");
   const isConnectionError =
     errorMessage.includes("connection") || errorMessage.includes("Database");
+
+  const handleCreateNewSession = () => {
+    // Redirect to create a new session with the same code
+    window.location.href = `/?code=${code}&action=create`;
+  };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-background via-background to-destructive/5 flex items-center justify-center p-4">
@@ -69,23 +74,31 @@ export default function InvalidSession({
                 </div>
               )}
             </div>
-            <div className="flex flex-col sm:flex-row gap-3">
-              {onRetry && (
-                <Button onClick={onRetry} className="flex-1">
-                  <RotateCcw className="w-4 h-4 mr-2" />
-                  Try Again
+            <div className="flex flex-col gap-3">
+              {isSessionNotFound && (
+                <Button onClick={handleCreateNewSession} className="w-full">
+                  <Plus className="w-4 h-4 mr-2" />
+                  Create New Session with Code {code}
                 </Button>
               )}
-              <Button
-                asChild
-                variant={onRetry ? "outline" : "default"}
-                className="flex-1"
-              >
-                <Link href="/">
-                  <Home className="w-4 h-4 mr-2" />
-                  Go Home
-                </Link>
-              </Button>
+              <div className="flex flex-col sm:flex-row gap-3">
+                {onRetry && (
+                  <Button onClick={onRetry} className="flex-1">
+                    <RotateCcw className="w-4 h-4 mr-2" />
+                    Try Again
+                  </Button>
+                )}
+                <Button
+                  asChild
+                  variant={onRetry ? "outline" : "default"}
+                  className="flex-1"
+                >
+                  <Link href="/">
+                    <Home className="w-4 h-4 mr-2" />
+                    Go Home
+                  </Link>
+                </Button>
+              </div>
             </div>
           </CardContent>
         </Card>

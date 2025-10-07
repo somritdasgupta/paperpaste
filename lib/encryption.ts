@@ -87,9 +87,130 @@ export async function decryptDeviceName(encryptedName: string, sessionKey: Crypt
   return decryptData(encryptedName, sessionKey);
 }
 
-// Encrypt file data (binary)
-export async function encryptFile(file: File, sessionKey: CryptoKey): Promise<{ encryptedData: string; originalName: string; mimeType: string; size: number }> {
-  const arrayBuffer = await file.arrayBuffer();
+// Compression utilities for better performance
+async function compressFile(file: File): Promise<{ compressedFile: File; compressionRatio: number }> {
+  // For images, create a compressed version
+  if (file.type.startsWith('image/') && file.size > 500 * 1024) { // 500KB threshold
+    return new Promise((resolve) => {
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d')!;
+      const img = new Image();
+      
+      img.onload = () => {
+        let { width, height } = img;
+        const maxDimension = 1920;
+        
+        if (width > maxDimension || height > maxDimension) {
+          const ratio = Math.min(maxDimension / width, maxDimension / height);
+          width *= ratio;
+          height *= ratio;
+        }
+        
+        canvas.width = width;
+        canvas.height = height;
+        ctx.drawImage(img, 0, 0, width, height);
+        
+        canvas.toBlob(
+          (blob) => {
+            if (blob && blob.size < file.size) {
+              const compressedFile = new File([blob], file.name, {
+                type: file.type,
+                lastModified: file.lastModified,
+              });
+              resolve({
+                compressedFile,
+                compressionRatio: file.size / blob.size
+              });
+            } else {
+              resolve({ compressedFile: file, compressionRatio: 1 });
+            }
+          },
+          file.type,
+          0.8 // Compression quality
+        );
+      };
+      
+      img.onerror = () => resolve({ compressedFile: file, compressionRatio: 1 });
+      img.src = URL.createObjectURL(file);
+    });
+  }
+  
+  const msOfficeTypes = [
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document', // .docx
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', // .xlsx
+    'application/vnd.openxmlformats-officedocument.presentationml.presentation', // .pptx
+    'application/vnd.ms-word.document.macroEnabled.12', // .docm
+    'application/vnd.ms-excel.sheet.macroEnabled.12', // .xlsm
+    'application/vnd.ms-powerpoint.presentation.macroEnabled.12', // .pptm
+    'application/msword', // .doc
+    'application/vnd.ms-excel', // .xls
+    'application/vnd.ms-powerpoint', // .ppt
+    'application/pdf', // PDF files can also benefit
+  ];
+  
+  if (msOfficeTypes.includes(file.type) && file.size > 100 * 1024) { 
+    try {
+      const arrayBuffer = await file.arrayBuffer();
+      
+      // Check if CompressionStream is available 
+      if (typeof CompressionStream !== 'undefined') {
+        const compressionStream = new CompressionStream('gzip');
+        const response = new Response(arrayBuffer);
+        const compressedResponse = new Response(response.body!.pipeThrough(compressionStream));
+        const compressedArrayBuffer = await compressedResponse.arrayBuffer();
+        
+        // Only use compressed version if it's actually smaller
+        if (compressedArrayBuffer.byteLength < arrayBuffer.byteLength) {
+          // Create a new file with compressed data but preserve original metadata
+          const compressedFile = new File([compressedArrayBuffer], file.name + '.gz.tmp', {
+            type: 'application/gzip-compressed',
+            lastModified: file.lastModified,
+          });
+          
+          // Store original metadata for decompression
+          (compressedFile as any).originalType = file.type;
+          (compressedFile as any).originalName = file.name;
+          (compressedFile as any).isCompressed = true;
+          
+          return {
+            compressedFile,
+            compressionRatio: arrayBuffer.byteLength / compressedArrayBuffer.byteLength
+          };
+        }
+      } else {
+        // Fallback: use simple binary optimization for older browsers
+        const optimizedBuffer = await optimizeBinaryFile(arrayBuffer);
+        if (optimizedBuffer.byteLength < arrayBuffer.byteLength) {
+          const optimizedFile = new File([optimizedBuffer], file.name, {
+            type: file.type,
+            lastModified: file.lastModified,
+          });
+          
+          return {
+            compressedFile: optimizedFile,
+            compressionRatio: arrayBuffer.byteLength / optimizedBuffer.byteLength
+          };
+        }
+      }
+    } catch (error) {
+      console.warn('Compression failed, using original file:', error);
+    }
+  }
+  
+  // For other file types or if compression failed, return as-is
+  return { compressedFile: file, compressionRatio: 1 };
+}
+
+async function optimizeBinaryFile(arrayBuffer: ArrayBuffer): Promise<ArrayBuffer> {
+  console.warn('CompressionStream not supported, compression skipped');
+  return arrayBuffer;
+}
+
+// Encrypt file data (binary) with compression
+export async function encryptFile(file: File, sessionKey: CryptoKey): Promise<{ encryptedData: string; originalName: string; mimeType: string; size: number; compressionRatio?: number }> {
+  // Compress file if needed for better performance
+  const { compressedFile, compressionRatio } = await compressFile(file);
+  const arrayBuffer = await compressedFile.arrayBuffer();
   const iv = crypto.getRandomValues(new Uint8Array(12));
   
   const encrypted = await crypto.subtle.encrypt(
@@ -103,14 +224,21 @@ export async function encryptFile(file: File, sessionKey: CryptoKey): Promise<{ 
   combined.set(iv);
   combined.set(new Uint8Array(encrypted), iv.length);
   
-  // Convert to base64 for storage
-  const encryptedData = btoa(String.fromCharCode(...combined));
+  // Convert to base64 for storage (handle large files without call stack overflow)
+  let binaryString = '';
+  const chunkSize = 8192;
+  for (let i = 0; i < combined.length; i += chunkSize) {
+    const chunk = combined.slice(i, i + chunkSize);
+    binaryString += String.fromCharCode.apply(null, Array.from(chunk));
+  }
+  const encryptedData = btoa(binaryString);
   
   return {
     encryptedData,
     originalName: file.name,
     mimeType: file.type || 'application/octet-stream',
-    size: file.size
+    size: compressedFile.size, // Use compressed size
+    compressionRatio
   };
 }
 
@@ -130,6 +258,23 @@ export async function decryptFile(encryptedData: string, sessionKey: CryptoKey, 
       encrypted
     );
     
+    // Check if this was a compressed file
+    if (mimeType === 'application/gzip-compressed') {
+      try {
+        if (typeof DecompressionStream !== 'undefined') {
+          const decompressionStream = new DecompressionStream('gzip');
+          const response = new Response(decrypted);
+          const decompressedResponse = new Response(response.body!.pipeThrough(decompressionStream));
+          const decompressedArrayBuffer = await decompressedResponse.arrayBuffer();
+          
+          // Return decompressed blob with generic binary type (original type will be set when creating the file)
+          return new Blob([decompressedArrayBuffer], { type: 'application/octet-stream' });
+        }
+      } catch (decompressError) {
+        console.warn('Decompression failed, using encrypted data as-is:', decompressError);
+      }
+    }
+    
     return new Blob([decrypted], { type: mimeType });
   } catch (error) {
     console.error('File decryption failed:', error);
@@ -137,10 +282,38 @@ export async function decryptFile(encryptedData: string, sessionKey: CryptoKey, 
   }
 }
 
-// Create a download URL for encrypted file
-export async function createEncryptedFileDownloadUrl(encryptedData: string, sessionKey: CryptoKey, mimeType: string): Promise<string> {
+// Create a download URL for encrypted file with preview support
+export async function createEncryptedFileDownloadUrl(encryptedData: string, sessionKey: CryptoKey, mimeType: string, fileName?: string): Promise<string> {
   const blob = await decryptFile(encryptedData, sessionKey, mimeType);
-  return URL.createObjectURL(blob);
+  
+  // For compressed files, determine the original MIME type
+  let finalMimeType = mimeType;
+  if (mimeType === 'application/gzip-compressed' && fileName) {
+    finalMimeType = getOriginalMimeType(fileName);
+  }
+  
+  // Ensure blob has correct MIME type for preview
+  const correctedBlob = new Blob([blob], { type: finalMimeType });
+  return URL.createObjectURL(correctedBlob);
+}
+
+// Helper function to determine original MIME type from filename
+function getOriginalMimeType(fileName: string): string {
+  const extension = fileName.toLowerCase().split('.').pop();
+  const mimeTypeMap: { [key: string]: string } = {
+    'docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    'xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    'pptx': 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+    'docm': 'application/vnd.ms-word.document.macroEnabled.12',
+    'xlsm': 'application/vnd.ms-excel.sheet.macroEnabled.12',
+    'pptm': 'application/vnd.ms-powerpoint.presentation.macroEnabled.12',
+    'doc': 'application/msword',
+    'xls': 'application/vnd.ms-excel',
+    'ppt': 'application/vnd.ms-powerpoint',
+    'pdf': 'application/pdf',
+  };
+  
+  return mimeTypeMap[extension || ''] || 'application/octet-stream';
 }
 
 // Utility to check if content is likely a file (base64 encrypted file data)
@@ -149,9 +322,9 @@ export function isEncryptedFileData(content: string): boolean {
   return content.length > 1000 && /^[A-Za-z0-9+/]+=*$/.test(content);
 }
 
-// ======= Enhanced Zero-Knowledge Encryption Functions =======
+// ======= Zero-Knowledge Encryption Functions =======
 
-// Enhanced Zero-Knowledge: Timestamp Encryption
+// Zero-Knowledge: Timestamp Encryption
 export async function encryptTimestamp(timestamp: Date, sessionKey: CryptoKey): Promise<string> {
   return await encryptData(timestamp.toISOString(), sessionKey);
 }
