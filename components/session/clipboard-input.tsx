@@ -7,7 +7,14 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { getSupabaseBrowserWithCode } from "@/lib/supabase/client";
 import { getOrCreateDeviceId } from "@/lib/device";
-import { generateSessionKey, encryptData } from "@/lib/encryption";
+import {
+  generateSessionKey,
+  encryptData,
+  encryptFile,
+  encryptTimestamp,
+  encryptDisplayId,
+  generateDisplayId,
+} from "@/lib/encryption";
 import {
   Type,
   Code,
@@ -99,20 +106,36 @@ export default function ClipboardInput({ code }: { code: string }) {
     setBusy(true);
     try {
       if (type === "file" && file) {
-        // File upload
-        const path = `${code}/${Date.now()}-${file.name}`;
-        const { error: uploadError } = await supabase.storage
-          .from("paperpaste")
-          .upload(path, file, { cacheControl: "3600", upsert: false });
-        if (uploadError) throw uploadError;
+        // Encrypt file completely client-side for zero-knowledge storage
+        const { encryptedData, originalName, mimeType, size } =
+          await encryptFile(file, sessionKey);
 
-        // Encrypt filename for privacy
-        const encryptedFileName = await encryptData(file.name, sessionKey);
+        // Encrypt metadata
+        const encryptedFileName = await encryptData(originalName, sessionKey);
+        const encryptedMimeType = await encryptData(mimeType, sessionKey);
+        const encryptedSize = await encryptData(size.toString(), sessionKey);
+
+        // Enhanced encryption: encrypt timestamps and display ID
+        const now = new Date();
+        const createdAtEncrypted = await encryptTimestamp(now, sessionKey);
+        const updatedAtEncrypted = await encryptTimestamp(now, sessionKey);
+        const displayId = generateDisplayId();
+        const displayIdEncrypted = await encryptDisplayId(
+          displayId,
+          sessionKey
+        );
+
+        // Store encrypted file data directly in database (no file storage needed)
         const { error: insertError } = await doInsert({
           session_code: code,
           kind: "file",
-          content_encrypted: encryptedFileName,
-          file_url: path,
+          file_data_encrypted: encryptedData,
+          file_name_encrypted: encryptedFileName,
+          file_mime_type_encrypted: encryptedMimeType,
+          file_size_encrypted: encryptedSize,
+          created_at_encrypted: createdAtEncrypted,
+          updated_at_encrypted: updatedAtEncrypted,
+          display_id_encrypted: displayIdEncrypted,
           device_id: deviceId,
         });
         if (insertError) throw insertError;
@@ -120,10 +143,24 @@ export default function ClipboardInput({ code }: { code: string }) {
       } else if (text.trim()) {
         // Encrypt text/code content
         const encryptedContent = await encryptData(text.trim(), sessionKey);
+
+        // Enhanced encryption: encrypt timestamps and display ID
+        const now = new Date();
+        const createdAtEncrypted = await encryptTimestamp(now, sessionKey);
+        const updatedAtEncrypted = await encryptTimestamp(now, sessionKey);
+        const displayId = generateDisplayId();
+        const displayIdEncrypted = await encryptDisplayId(
+          displayId,
+          sessionKey
+        );
+
         const { error } = await doInsert({
           session_code: code,
           kind: type,
           content_encrypted: encryptedContent,
+          created_at_encrypted: createdAtEncrypted,
+          updated_at_encrypted: updatedAtEncrypted,
+          display_id_encrypted: displayIdEncrypted,
           device_id: deviceId,
         });
         if (error) throw error;

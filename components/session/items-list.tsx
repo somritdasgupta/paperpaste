@@ -10,6 +10,9 @@ import {
   generateSessionKey,
   decryptData,
   decryptDeviceName,
+  createEncryptedFileDownloadUrl,
+  decryptTimestamp,
+  decryptDisplayId,
 } from "@/lib/encryption";
 import {
   Check,
@@ -23,6 +26,7 @@ import {
   FileText,
   Code,
   Image,
+  RefreshCw,
 } from "lucide-react";
 import { marked } from "marked";
 import DOMPurify from "dompurify";
@@ -34,7 +38,24 @@ type Item = {
   content_encrypted?: string | null;
   content?: string | null; // decrypted content for display
   file_url: string | null;
-  created_at: string;
+  // New encrypted file fields
+  file_data_encrypted?: string | null;
+  file_name_encrypted?: string | null;
+  file_mime_type_encrypted?: string | null;
+  file_size_encrypted?: string | null;
+  // Enhanced encryption fields
+  created_at_encrypted?: string | null;
+  updated_at_encrypted?: string | null;
+  display_id_encrypted?: string | null;
+  // Decrypted fields for display
+  file_name?: string;
+  file_mime_type?: string;
+  file_size?: number;
+  file_download_url?: string;
+  display_id?: string;
+  display_created_at?: Date;
+  display_updated_at?: Date;
+  created_at: string; // Server timestamp for sorting
   device_id?: string;
   device_name?: string; // decrypted device name for display
 };
@@ -58,6 +79,7 @@ export default function ItemsList({ code }: { code: string }) {
   const [error, setError] = useState<string | null>(null);
   const [deviceId, setDeviceId] = useState<string>("");
   const [copiedItems, setCopiedItems] = useState<Set<string>>(new Set());
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   // Initialize device ID on client side
   useEffect(() => {
@@ -68,6 +90,189 @@ export default function ItemsList({ code }: { code: string }) {
   useEffect(() => {
     generateSessionKey(code).then(setSessionKey);
   }, [code]);
+
+  // Extract data fetching logic for reuse
+  const fetchAndDecryptItems = async (showLoading = false) => {
+    if (!supabase || !sessionKey) return;
+
+    try {
+      if (showLoading) setIsRefreshing(true);
+      setError(null);
+      setConnectionStatus("connecting");
+
+      // First fetch all devices for this session to build device name map
+      const { data: devicesData } = await supabase
+        .from("devices")
+        .select("device_id, device_name_encrypted")
+        .eq("session_code", code);
+
+      // Build device name map with decryption
+      const deviceMap = new Map<string, DeviceInfo>();
+      if (devicesData) {
+        for (const device of devicesData) {
+          let deviceName = "Anonymous Device";
+          if (device.device_name_encrypted) {
+            try {
+              deviceName = await decryptDeviceName(
+                device.device_name_encrypted,
+                sessionKey
+              );
+            } catch (e) {
+              console.warn(
+                "Failed to decrypt device name for",
+                device.device_id
+              );
+            }
+          }
+          deviceMap.set(device.device_id, {
+            device_id: device.device_id,
+            device_name_encrypted: device.device_name_encrypted,
+            device_name: deviceName,
+          });
+        }
+      }
+      setDevices(deviceMap);
+
+      const { data, error } = await supabase
+        .from("items")
+        .select("*")
+        .eq("session_code", code)
+        .order("created_at", { ascending: false })
+        .limit(200);
+
+      if (error) {
+        console.error("Fetch error:", error);
+        setError(error.message);
+        setConnectionStatus("disconnected");
+        return;
+      }
+
+      if (!data) {
+        setConnectionStatus("connected");
+        return;
+      }
+
+      // Decrypt content and resolve device names for display
+      const decryptedItems = await Promise.all(
+        data.map(async (item: any) => {
+          let content = null;
+          if (item.content_encrypted) {
+            try {
+              content = await decryptData(item.content_encrypted, sessionKey);
+            } catch (e) {
+              console.warn("Failed to decrypt item content:", e);
+              content = "[Encrypted Content - Unable to Decrypt]";
+            }
+          }
+
+          // Decrypt file metadata if it's a file
+          let fileName = null;
+          let fileMimeType = null;
+          let fileSize = null;
+          let fileDownloadUrl = null;
+
+          if (item.kind === "file" && item.file_data_encrypted) {
+            try {
+              // Decrypt file metadata
+              if (item.file_name_encrypted) {
+                fileName = await decryptData(
+                  item.file_name_encrypted,
+                  sessionKey
+                );
+              }
+              if (item.file_mime_type_encrypted) {
+                fileMimeType = await decryptData(
+                  item.file_mime_type_encrypted,
+                  sessionKey
+                );
+              }
+              if (item.file_size_encrypted) {
+                const sizeStr = await decryptData(
+                  item.file_size_encrypted,
+                  sessionKey
+                );
+                fileSize = parseInt(sizeStr, 10);
+              }
+
+              // Create download URL for encrypted file
+              if (fileMimeType) {
+                fileDownloadUrl = await createEncryptedFileDownloadUrl(
+                  item.file_data_encrypted,
+                  sessionKey,
+                  fileMimeType
+                );
+              }
+            } catch (e) {
+              console.warn("Failed to decrypt file metadata:", e);
+              fileName = "[Encrypted File]";
+            }
+          }
+
+          // Enhanced decryption: decrypt timestamps and display ID
+          let displayId = null;
+          let displayCreatedAt = null;
+          let displayUpdatedAt = null;
+
+          try {
+            if (item.display_id_encrypted) {
+              displayId = await decryptDisplayId(
+                item.display_id_encrypted,
+                sessionKey
+              );
+            }
+            if (item.created_at_encrypted) {
+              displayCreatedAt = await decryptTimestamp(
+                item.created_at_encrypted,
+                sessionKey
+              );
+            }
+            if (item.updated_at_encrypted) {
+              displayUpdatedAt = await decryptTimestamp(
+                item.updated_at_encrypted,
+                sessionKey
+              );
+            }
+          } catch (e) {
+            console.warn("Failed to decrypt enhanced metadata:", e);
+          }
+
+          // Get device name from device map
+          let deviceName = "Anonymous Device";
+          const deviceInfo = deviceMap.get(item.device_id);
+          if (deviceInfo?.device_name) {
+            deviceName = deviceInfo.device_name;
+          }
+
+          return {
+            ...item,
+            content,
+            device_name: deviceName,
+            file_name: fileName,
+            file_mime_type: fileMimeType,
+            file_size: fileSize,
+            file_download_url: fileDownloadUrl,
+            display_id: displayId,
+            display_created_at: displayCreatedAt,
+            display_updated_at: displayUpdatedAt,
+          };
+        })
+      );
+
+      setItems(decryptedItems);
+      setConnectionStatus("connected");
+    } catch (e: any) {
+      console.error("Error fetching items:", e);
+      setError(e?.message || "Failed to fetch items");
+      setConnectionStatus("disconnected");
+    } finally {
+      if (showLoading) setIsRefreshing(false);
+    }
+  };
+
+  // Manual refresh function
+  const handleManualRefresh = () => {
+    fetchAndDecryptItems(true);
+  };
 
   // Fetch and decrypt device information
   useEffect(() => {
@@ -165,102 +370,7 @@ export default function ItemsList({ code }: { code: string }) {
     if (!supabase || !sessionKey) return;
     let active = true;
 
-    const fetchAndDecryptItems = async () => {
-      try {
-        setError(null);
-        setConnectionStatus("connecting");
-
-        // First fetch all devices for this session to build device name map
-        const { data: devicesData } = await supabase
-          .from("devices")
-          .select("device_id, device_name_encrypted")
-          .eq("session_code", code);
-
-        // Build device name map with decryption
-        const deviceMap = new Map<string, DeviceInfo>();
-        if (devicesData) {
-          for (const device of devicesData) {
-            let deviceName = "Anonymous Device";
-            if (device.device_name_encrypted) {
-              try {
-                deviceName = await decryptDeviceName(
-                  device.device_name_encrypted,
-                  sessionKey
-                );
-              } catch (e) {
-                console.warn(
-                  "Failed to decrypt device name for",
-                  device.device_id
-                );
-              }
-            }
-            deviceMap.set(device.device_id, {
-              device_id: device.device_id,
-              device_name_encrypted: device.device_name_encrypted,
-              device_name: deviceName,
-            });
-          }
-        }
-        setDevices(deviceMap);
-
-        const { data, error } = await supabase
-          .from("items")
-          .select("*")
-          .eq("session_code", code)
-          .order("created_at", { ascending: false })
-          .limit(200);
-
-        if (!active) return;
-
-        if (error) {
-          console.error("Fetch error:", error);
-          setError(error.message);
-          setConnectionStatus("disconnected");
-          return;
-        }
-
-        if (!data) {
-          setConnectionStatus("connected");
-          return;
-        }
-
-        // Decrypt content and resolve device names for display
-        const decryptedItems = await Promise.all(
-          data.map(async (item: any) => {
-            let content = null;
-            if (item.content_encrypted) {
-              try {
-                content = await decryptData(item.content_encrypted, sessionKey);
-              } catch (e) {
-                console.warn("Failed to decrypt item content:", e);
-                content = "[Encrypted Content - Unable to Decrypt]";
-              }
-            }
-
-            // Get device name from device map
-            let deviceName = "Anonymous Device";
-            const deviceInfo = deviceMap.get(item.device_id);
-            if (deviceInfo?.device_name) {
-              deviceName = deviceInfo.device_name;
-            }
-
-            return {
-              ...item,
-              content,
-              device_name: deviceName,
-            };
-          })
-        );
-
-        setItems(decryptedItems);
-        setConnectionStatus("connected");
-      } catch (e: any) {
-        console.error("Error fetching items:", e);
-        setError(e?.message || "Failed to fetch items");
-        setConnectionStatus("disconnected");
-      }
-    };
-
+    // Initial data fetch
     fetchAndDecryptItems();
 
     // Subscribe to device changes for real-time device name updates
@@ -338,6 +448,46 @@ export default function ItemsList({ code }: { code: string }) {
               }
             }
 
+            // Decrypt file metadata if it's a file
+            let fileName = null;
+            let fileMimeType = null;
+            let fileSize = null;
+            let fileDownloadUrl = null;
+
+            if (newItem.kind === "file" && newItem.file_data_encrypted) {
+              try {
+                if (newItem.file_name_encrypted) {
+                  fileName = await decryptData(
+                    newItem.file_name_encrypted,
+                    sessionKey
+                  );
+                }
+                if (newItem.file_mime_type_encrypted) {
+                  fileMimeType = await decryptData(
+                    newItem.file_mime_type_encrypted,
+                    sessionKey
+                  );
+                }
+                if (newItem.file_size_encrypted) {
+                  const sizeStr = await decryptData(
+                    newItem.file_size_encrypted,
+                    sessionKey
+                  );
+                  fileSize = parseInt(sizeStr, 10);
+                }
+                if (fileMimeType) {
+                  fileDownloadUrl = await createEncryptedFileDownloadUrl(
+                    newItem.file_data_encrypted,
+                    sessionKey,
+                    fileMimeType
+                  );
+                }
+              } catch (e) {
+                console.warn("Failed to decrypt file metadata:", e);
+                fileName = "[Encrypted File]";
+              }
+            }
+
             // Get device name for the new item
             let deviceName = "Anonymous Device";
             const deviceInfo = devices.get(newItem.device_id);
@@ -349,12 +499,16 @@ export default function ItemsList({ code }: { code: string }) {
               ...newItem,
               content,
               device_name: deviceName,
+              file_name: fileName,
+              file_mime_type: fileMimeType,
+              file_size: fileSize,
+              file_download_url: fileDownloadUrl,
             };
 
             setItems((prev) => [decryptedItem, ...prev]);
           } else {
             // For updates and deletes, refetch all to maintain consistency
-            fetchAndDecryptItems();
+            if (active) fetchAndDecryptItems();
           }
         }
       )
@@ -559,6 +713,46 @@ export default function ItemsList({ code }: { code: string }) {
 
   return (
     <div className="w-full">
+      {/* Header with status and refresh button */}
+      <div className="flex items-center justify-between p-3 border-b border-border/50">
+        <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1">
+            <div
+              className={`w-2 h-2 rounded-full ${
+                connectionStatus === "connected"
+                  ? "bg-green-500"
+                  : connectionStatus === "connecting"
+                  ? "bg-yellow-500 animate-pulse"
+                  : "bg-red-500"
+              }`}
+            />
+            <span className="text-xs text-muted-foreground">
+              {connectionStatus === "connected" && "Live"}
+              {connectionStatus === "connecting" && "Connecting..."}
+              {connectionStatus === "disconnected" && "Disconnected"}
+            </span>
+          </div>
+          {items.length > 0 && (
+            <span className="text-xs text-muted-foreground">
+              • {items.length} item{items.length !== 1 ? "s" : ""}
+            </span>
+          )}
+        </div>
+        <Button
+          size="sm"
+          variant="ghost"
+          onClick={handleManualRefresh}
+          disabled={isRefreshing}
+          className="h-8 px-2 text-xs hover:bg-muted/50"
+          title="Refresh data"
+        >
+          <RefreshCw
+            className={`h-3 w-3 mr-1 ${isRefreshing ? "animate-spin" : ""}`}
+          />
+          Refresh
+        </Button>
+      </div>
+
       {items.length === 0 ? (
         <div className="flex items-center justify-center h-32 text-muted-foreground">
           <div className="text-center">
@@ -608,37 +802,61 @@ export default function ItemsList({ code }: { code: string }) {
                   </div>
 
                   {/* Content */}
-                  {item.kind === "file" && item.file_url ? (
+                  {item.kind === "file" ? (
                     <div className="flex items-center justify-between gap-3 p-3 bg-muted/30 rounded-lg">
                       <div className="flex items-center gap-2 flex-1 min-w-0">
                         <Download className="h-4 w-4 text-primary flex-shrink-0" />
-                        <a
-                          href={publicUrlFor(item.file_url)}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="text-primary hover:underline truncate font-medium"
-                        >
-                          {item.content || "Download file"}
-                        </a>
+                        <div className="flex-1 min-w-0">
+                          <div className="font-medium text-primary truncate">
+                            {item.file_name || item.content || "Encrypted File"}
+                          </div>
+                          {item.file_size && (
+                            <div className="text-xs text-muted-foreground">
+                              {(item.file_size / 1024).toFixed(1)} KB
+                              {item.file_mime_type &&
+                                ` • ${item.file_mime_type}`}
+                            </div>
+                          )}
+                        </div>
                       </div>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={() =>
-                          copyToClipboard(
-                            publicUrlFor(item.file_url || ""),
-                            item.id
-                          )
-                        }
-                        className="h-8 w-8 p-0 hover:bg-background"
-                        title="Copy link"
-                      >
-                        {isCopied ? (
-                          <Check className="h-4 w-4 text-green-500" />
-                        ) : (
-                          <Copy className="h-4 w-4" />
+                      <div className="flex gap-1">
+                        {item.file_download_url && (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => {
+                              const link = document.createElement("a");
+                              link.href = item.file_download_url!;
+                              link.download = item.file_name || "download";
+                              document.body.appendChild(link);
+                              link.click();
+                              document.body.removeChild(link);
+                            }}
+                            className="h-8 w-8 p-0 hover:bg-background"
+                            title="Download file"
+                          >
+                            <Download className="h-4 w-4" />
+                          </Button>
                         )}
-                      </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() =>
+                            copyToClipboard(
+                              item.file_name || "Encrypted File",
+                              item.id
+                            )
+                          }
+                          className="h-8 w-8 p-0 hover:bg-background"
+                          title="Copy filename"
+                        >
+                          {isCopied ? (
+                            <Check className="h-4 w-4 text-green-500" />
+                          ) : (
+                            <Copy className="h-4 w-4" />
+                          )}
+                        </Button>
+                      </div>
                     </div>
                   ) : (
                     <div className="relative">

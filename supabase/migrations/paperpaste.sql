@@ -29,8 +29,9 @@ BEGIN
     CREATE TABLE public.devices (
       id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
       session_code text NOT NULL REFERENCES public.sessions(code) ON DELETE CASCADE,
-      device_id text NOT NULL DEFAULT '',
-      device_name_encrypted text,
+      device_id text NOT NULL DEFAULT '', -- Anonymous server identifier
+      device_name_encrypted text, -- Encrypted device name
+      device_metadata_encrypted text, -- Encrypted device info (browser, OS, etc.)
       is_host boolean DEFAULT false,
       last_seen timestamptz DEFAULT now(),
       is_frozen boolean DEFAULT false,
@@ -84,6 +85,14 @@ BEGIN
         ALTER TABLE public.devices ADD COLUMN can_view boolean DEFAULT true;
       END IF;
 
+      -- Add device_metadata_encrypted column if it doesn't exist
+      IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_name = 'devices' AND column_name = 'device_metadata_encrypted' AND table_schema = 'public'
+      ) THEN
+        ALTER TABLE public.devices ADD COLUMN device_metadata_encrypted text;
+      END IF;
+
       -- Add unique constraint if it doesn't exist
       IF NOT EXISTS (
         SELECT 1 FROM information_schema.table_constraints 
@@ -116,9 +125,106 @@ BEGIN
       kind text NOT NULL CHECK (kind IN ('text','code','file')),
       content text,
       file_url text,
-      created_at timestamptz DEFAULT now()
+      -- New encrypted fields for zero-knowledge file storage
+      content_encrypted text, -- For encrypted text/code content
+      file_data_encrypted text, -- For encrypted file content as base64
+      file_name_encrypted text, -- For encrypted original filename
+      file_mime_type_encrypted text, -- For encrypted original MIME type
+      file_size_encrypted text, -- For encrypted original file size
+      -- Enhanced zero-knowledge fields
+      created_at_encrypted text, -- Encrypted timestamp for client display
+      updated_at_encrypted text, -- Encrypted update timestamp
+      display_id_encrypted text, -- Encrypted human-readable item ID
+      device_id text, -- Anonymous device identifier for server operations
+      created_at timestamptz DEFAULT now(), -- Server timestamp for cleanup/indexing
+      updated_at timestamptz DEFAULT now() -- Server timestamp for operations
     );
     CREATE INDEX IF NOT EXISTS idx_items_session ON public.items(session_code, created_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_items_device ON public.items(device_id);
+  ELSE
+    -- Add missing columns to existing items table
+    BEGIN
+      -- Add content_encrypted column if it doesn't exist
+      IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_name = 'items' AND column_name = 'content_encrypted' AND table_schema = 'public'
+      ) THEN
+        ALTER TABLE public.items ADD COLUMN content_encrypted text;
+      END IF;
+
+      -- Add file_data_encrypted column if it doesn't exist
+      IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_name = 'items' AND column_name = 'file_data_encrypted' AND table_schema = 'public'
+      ) THEN
+        ALTER TABLE public.items ADD COLUMN file_data_encrypted text;
+      END IF;
+
+      -- Add file_name_encrypted column if it doesn't exist
+      IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_name = 'items' AND column_name = 'file_name_encrypted' AND table_schema = 'public'
+      ) THEN
+        ALTER TABLE public.items ADD COLUMN file_name_encrypted text;
+      END IF;
+
+      -- Add file_mime_type_encrypted column if it doesn't exist
+      IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_name = 'items' AND column_name = 'file_mime_type_encrypted' AND table_schema = 'public'
+      ) THEN
+        ALTER TABLE public.items ADD COLUMN file_mime_type_encrypted text;
+      END IF;
+
+      -- Add file_size_encrypted column if it doesn't exist
+      IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_name = 'items' AND column_name = 'file_size_encrypted' AND table_schema = 'public'
+      ) THEN
+        ALTER TABLE public.items ADD COLUMN file_size_encrypted text;
+      END IF;
+
+      -- Add created_at_encrypted column if it doesn't exist
+      IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_name = 'items' AND column_name = 'created_at_encrypted' AND table_schema = 'public'
+      ) THEN
+        ALTER TABLE public.items ADD COLUMN created_at_encrypted text;
+      END IF;
+
+      -- Add updated_at_encrypted column if it doesn't exist
+      IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_name = 'items' AND column_name = 'updated_at_encrypted' AND table_schema = 'public'
+      ) THEN
+        ALTER TABLE public.items ADD COLUMN updated_at_encrypted text;
+      END IF;
+
+      -- Add display_id_encrypted column if it doesn't exist
+      IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_name = 'items' AND column_name = 'display_id_encrypted' AND table_schema = 'public'
+      ) THEN
+        ALTER TABLE public.items ADD COLUMN display_id_encrypted text;
+      END IF;
+
+      -- Add device_id column if it doesn't exist
+      IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_name = 'items' AND column_name = 'device_id' AND table_schema = 'public'
+      ) THEN
+        ALTER TABLE public.items ADD COLUMN device_id text;
+        CREATE INDEX IF NOT EXISTS idx_items_device ON public.items(device_id);
+      END IF;
+
+      -- Add updated_at column if it doesn't exist
+      IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_name = 'items' AND column_name = 'updated_at' AND table_schema = 'public'
+      ) THEN
+        ALTER TABLE public.items ADD COLUMN updated_at timestamptz DEFAULT now();
+      END IF;
+    END;
   END IF;
 END $$;
 
