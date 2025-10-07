@@ -85,8 +85,8 @@ export default function HomePage() {
         <div className="w-full mx-auto">
           <EnvBanner />
           <div className="grid lg:grid-cols-1 gap-8">
-            <Card className="p-8 sm:p-12 lg:p-16 text-center border-2 hover:border-primary/20 transition-colors">
-              <CardContent className="space-y-8">
+            <Card className="p-4 sm:p-8 lg:p-12 text-center border-2 hover:border-primary/20 transition-colors">
+              <CardContent className="space-y-6 sm:space-y-8">
                 <JoinForm />
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-center gap-4">
                   <Button

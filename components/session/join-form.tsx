@@ -144,7 +144,7 @@ export default function JoinForm() {
 
   return (
     <form onSubmit={onJoin} className="flex flex-col gap-4 sm:gap-6">
-      <div className="grid grid-cols-7 gap-1.5 sm:gap-3 max-w-md mx-auto">
+      <div className="grid grid-cols-7 gap-2 sm:gap-3 max-w-sm sm:max-w-md mx-auto">
         {digits.map((d, i) => (
           <Input
             key={i}
@@ -161,10 +161,14 @@ export default function JoinForm() {
             disabled={isValidating}
             aria-label={`Digit ${i + 1}`}
             className={cn(
-              "h-12 sm:h-14 md:h-16",
-              "text-lg sm:text-2xl md:text-3xl",
-              "text-center tracking-widest session-code",
-              "min-w-0 flex-1",
+              "h-10 sm:h-12 md:h-14",
+              "text-base sm:text-lg md:text-2xl",
+              "text-center font-medium session-code",
+              "min-w-0 flex-1 px-1 sm:px-2",
+              "border-2 focus:border-primary",
+              "rounded-lg transition-all duration-200",
+              "touch-manipulation", // Improves touch responsiveness
+              "selection:bg-primary/20", // Better text selection color
               validationError &&
                 "border-destructive focus-visible:ring-destructive",
               isValidating && "opacity-50"
