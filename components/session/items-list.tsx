@@ -4,6 +4,15 @@ import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { getSupabaseBrowserWithCode } from "@/lib/supabase/client";
 import { getOrCreateDeviceId } from "@/lib/device";
 import {
@@ -84,6 +93,11 @@ export default function ItemsList({ code }: { code: string }) {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [autoRefreshEnabled, setAutoRefreshEnabled] = useState(true);
   const [autoRefreshInterval, setAutoRefreshInterval] = useState(5000); // 5 seconds default
+
+  // Session dialog states
+  const [sessionExpiredOpen, setSessionExpiredOpen] = useState(false);
+  const [sessionKilledOpen, setSessionKilledOpen] = useState(false);
+  const [killCountdown, setKillCountdown] = useState(5);
 
   // Initialize device ID on client side
   useEffect(() => {
@@ -536,8 +550,7 @@ export default function ItemsList({ code }: { code: string }) {
           filter: `code=eq.${code}`,
         },
         () => {
-          alert("Session has expired or was cleaned up.");
-          window.location.href = "/";
+          setSessionExpiredOpen(true);
         }
       )
       .subscribe();
@@ -547,18 +560,18 @@ export default function ItemsList({ code }: { code: string }) {
       .channel(`session-kill-${code}`)
       .on("broadcast", { event: "session_killed" }, (payload) => {
         if (payload.payload.code === code) {
+          setSessionKilledOpen(true);
           let count = 5;
+          setKillCountdown(count);
+
           const countdownInterval = setInterval(() => {
+            count--;
             if (count <= 0) {
               clearInterval(countdownInterval);
               window.location.href = "/";
               return;
             }
-
-            setError(
-              `Session terminated by host. Redirecting in ${count} seconds...`
-            );
-            count--;
+            setKillCountdown(count);
           }, 1000);
         }
       })
@@ -728,101 +741,93 @@ export default function ItemsList({ code }: { code: string }) {
   return (
     <div className="w-full">
       {/* Header with status and refresh button */}
-      <div className="flex items-center justify-between p-3 border-b border-border/50">
-        <div className="flex items-center gap-2">
+      <div className="flex items-center justify-between gap-2 p-3 border-b border-border/50 overflow-x-auto">
+        <div className="flex items-center gap-2 flex-shrink-0">
           <div className="flex items-center gap-1">
-            <div
-              className={`w-2 h-2 rounded-full transition-all duration-200 ${
-                connectionStatus === "connected"
-                  ? `bg-green-500 ${
-                      isRefreshing
-                        ? "animate-shimmer-glow shadow-lg shadow-green-500/50"
-                        : ""
-                    }`
-                  : connectionStatus === "connecting"
-                  ? "bg-yellow-500 animate-pulse"
-                  : "bg-red-500"
-              }`}
-            />
-            <span
-              className={`text-xs text-muted-foreground transition-all duration-200 ${
-                isRefreshing ? "text-primary font-medium" : ""
-              }`}
-            >
-              {connectionStatus === "connected" &&
-                (isRefreshing ? "Refreshing..." : "Live")}
-              {connectionStatus === "connecting" && "Connecting..."}
-              {connectionStatus === "disconnected" && "Disconnected"}
-            </span>
+        <div
+          className={`w-2 h-2 rounded-full transition-all duration-200 ${
+            connectionStatus === "connected"
+          ? `bg-green-500 ${
+              isRefreshing
+            ? "animate-shimmer-glow shadow-lg shadow-green-500/50"
+            : ""
+            }`
+          : connectionStatus === "connecting"
+          ? "bg-yellow-500 animate-pulse"
+          : "bg-red-500"
+          }`}
+        />
           </div>
-          {items.length > 0 && (
-            <span className="text-xs text-muted-foreground">
-              • {items.length} item{items.length !== 1 ? "s" : ""}
-            </span>
+          <span className="text-xs text-muted-foreground whitespace-nowrap">
+        {items.length > 0
+          ? `${items.length} item${items.length !== 1 ? "s" : ""}`
+          : "ready"}
+          </span>
+          <div className="flex items-center gap-1">
+        <Button
+          size="sm"
+          variant="ghost"
+          onClick={toggleAutoRefresh}
+          className="h-6 w-6 p-0 hover:bg-muted/50"
+          title={
+            autoRefreshEnabled
+          ? "Pause auto-refresh"
+          : "Resume auto-refresh"
+          }
+        >
+          {autoRefreshEnabled ? (
+            <Pause className="h-3 w-3" />
+          ) : (
+            <Play className="h-3 w-3" />
           )}
-          <div className="flex items-center gap-1 ml-2">
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={toggleAutoRefresh}
-              className="h-6 w-6 p-0 hover:bg-muted/50"
-              title={
-                autoRefreshEnabled
-                  ? "Pause auto-refresh"
-                  : "Resume auto-refresh"
-              }
-            >
-              {autoRefreshEnabled ? (
-                <Pause className="h-3 w-3" />
-              ) : (
-                <Play className="h-3 w-3" />
-              )}
-            </Button>
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={handleManualRefresh}
-              disabled={isRefreshing}
-              className={`h-6 w-6 p-0 hover:bg-muted/50 transition-all duration-200 ${
-                isRefreshing
-                  ? "bg-primary/10 border border-primary/20 animate-shimmer-glow"
-                  : ""
-              }`}
-              title="Refresh data"
-            >
-              <RefreshCw
-                className={`h-3 w-3 transition-all duration-200 ${
-                  isRefreshing
-                    ? "animate-spin text-primary scale-110"
-                    : "hover:scale-110"
-                }`}
-              />
-            </Button>
+        </Button>
+        <Button
+          size="sm"
+          variant="ghost"
+          onClick={handleManualRefresh}
+          disabled={isRefreshing}
+          className={`h-6 w-6 p-0 hover:bg-muted/50 transition-all duration-200 ${
+            isRefreshing
+          ? "bg-primary/10 border border-primary/20 animate-shimmer-glow"
+          : ""
+          }`}
+          title="Refresh data"
+        >
+          <RefreshCw
+            className={`h-3 w-3 transition-all duration-200 ${
+          isRefreshing
+            ? "animate-spin text-primary scale-110"
+            : "hover:scale-110"
+            }`}
+          />
+        </Button>
           </div>
         </div>
-        <div className="flex items-center gap-2">
-          <span className="text-xs text-muted-foreground">Auto-refresh:</span>
+        <div className="flex items-center gap-1 flex-shrink-0">
+          <span className="text-xs text-muted-foreground sm:inline whitespace-nowrap">
+        Auto-refresh:
+          </span>
           <select
-            value={autoRefreshInterval}
-            onChange={(e) => setAutoRefreshInterval(Number(e.target.value))}
-            className="text-xs bg-background border border-border/50 rounded px-1 text-foreground hover:bg-muted/50 focus:outline-none focus:ring-2 focus:ring-primary/50"
-            title="Auto-refresh interval"
+        value={autoRefreshInterval}
+        onChange={(e) => setAutoRefreshInterval(Number(e.target.value))}
+        className="text-xs bg-background border border-border/50 rounded px-1 text-foreground hover:bg-muted/50 focus:outline-none focus:ring-2 focus:ring-primary/50"
+        title="Auto-refresh interval"
           >
-            <option className="bg-background text-foreground" value={3000}>
-              3s
-            </option>
-            <option className="bg-background text-foreground" value={5000}>
-              5s
-            </option>
-            <option className="bg-background text-foreground" value={10000}>
-              10s
-            </option>
-            <option className="bg-background text-foreground" value={15000}>
-              15s
-            </option>
-            <option className="bg-background text-foreground" value={30000}>
-              30s
-            </option>
+        <option className="bg-background text-foreground" value={3000}>
+          3s
+        </option>
+        <option className="bg-background text-foreground" value={5000}>
+          5s
+        </option>
+        <option className="bg-background text-foreground" value={10000}>
+          10s
+        </option>
+        <option className="bg-background text-foreground" value={15000}>
+          15s
+        </option>
+        <option className="bg-background text-foreground" value={30000}>
+          30s
+        </option>
           </select>
         </div>
       </div>
@@ -834,7 +839,7 @@ export default function ItemsList({ code }: { code: string }) {
           </div>
         </div>
       ) : (
-        <div className="relative space-y-2 p-3">
+        <div className="relative space-y-2 p-2 sm:p-3">
           {/* Beautiful shimmer overlay during refresh */}
           {isRefreshing && (
             <div className="absolute inset-0 z-10 bg-gradient-to-r from-transparent via-white/20 to-transparent dark:via-white/10 animate-shimmer pointer-events-none rounded-lg">
@@ -856,18 +861,29 @@ export default function ItemsList({ code }: { code: string }) {
                     : ""
                 }`}
               >
-                <div className="p-3">
+                <div className="p-2 sm:p-3">
                   {/* Header with device info and timestamp */}
-                  <div className="flex items-center justify-between mb-2">
-                    <div className="flex items-center gap-2">
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-2">
+                    <div className="flex items-center gap-2 flex-wrap">
                       <div className="flex items-center gap-1">
                         {getDeviceIcon(item.device_name || "device")}
                         <Badge
                           variant={isOwnDevice ? "default" : "secondary"}
                           className="text-xs px-2 py-0.5"
                         >
-                          {item.device_name || "Anonymous Device"}
-                          {isOwnDevice && " (You)"}
+                          <span className="hidden sm:inline">
+                            {item.device_name || "Anonymous Device"}
+                            {isOwnDevice && " (You)"}
+                          </span>
+                          <span className="sm:hidden">
+                            {(item.device_name || "Anonymous Device").length >
+                            12
+                              ? `${(
+                                  item.device_name || "Anonymous Device"
+                                ).substring(0, 12)}...`
+                              : item.device_name || "Anonymous Device"}
+                            {isOwnDevice && " (You)"}
+                          </span>
                         </Badge>
                       </div>
                       <div className="flex items-center gap-1">
@@ -887,23 +903,28 @@ export default function ItemsList({ code }: { code: string }) {
 
                   {/* Content */}
                   {item.kind === "file" ? (
-                    <div className="flex items-center justify-between gap-3 p-3 bg-muted/30 rounded-lg">
-                      <div className="flex items-center gap-2 flex-1 min-w-0">
-                        <Download className="h-4 w-4 text-primary flex-shrink-0" />
-                        <div className="flex-1 min-w-0">
-                          <div className="font-medium text-primary truncate">
-                            {item.file_name || item.content || "Encrypted File"}
-                          </div>
-                          {item.file_size && (
-                            <div className="text-xs text-muted-foreground">
-                              {(item.file_size / 1024).toFixed(1)} KB
-                              {item.file_mime_type &&
-                                ` • ${item.file_mime_type}`}
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between gap-2 p-3 bg-muted/30 rounded-lg">
+                        <div className="flex items-center gap-2 flex-1 min-w-0">
+                          <Download className="h-4 w-4 text-primary flex-shrink-0" />
+                          <div className="flex-1 min-w-0">
+                            <div className="font-medium text-primary truncate text-sm">
+                              {item.file_name ||
+                                item.content ||
+                                "Encrypted File"}
                             </div>
-                          )}
+                            {item.file_size && (
+                              <div className="text-xs text-muted-foreground">
+                                {(item.file_size / 1024).toFixed(1)} KB
+                                {item.file_mime_type &&
+                                  ` • ${item.file_mime_type}`}
+                              </div>
+                            )}
+                          </div>
                         </div>
                       </div>
-                      <div className="flex gap-1">
+                      {/* Action buttons below file info */}
+                      <div className="flex justify-end gap-1">
                         {item.file_download_url && (
                           <Button
                             size="sm"
@@ -916,10 +937,11 @@ export default function ItemsList({ code }: { code: string }) {
                               link.click();
                               document.body.removeChild(link);
                             }}
-                            className="h-8 w-8 p-0 hover:bg-background"
+                            className="h-8 px-3 hover:bg-background text-xs"
                             title="Download file"
                           >
-                            <Download className="h-4 w-4" />
+                            <Download className="h-3 w-3 mr-1" />
+                            Download
                           </Button>
                         )}
                         <Button
@@ -931,90 +953,99 @@ export default function ItemsList({ code }: { code: string }) {
                               item.id
                             )
                           }
-                          className="h-8 w-8 p-0 hover:bg-background"
+                          className="h-8 px-3 hover:bg-background text-xs"
                           title="Copy filename"
                         >
                           {isCopied ? (
-                            <Check className="h-4 w-4 text-green-500" />
+                            <>
+                              <Check className="h-3 w-3 mr-1 text-green-500" />
+                              Copied
+                            </>
                           ) : (
-                            <Copy className="h-4 w-4" />
+                            <>
+                              <Copy className="h-3 w-3 mr-1" />
+                              Copy
+                            </>
                           )}
                         </Button>
                       </div>
                     </div>
                   ) : (
-                    <div className="relative">
-                      <div className="flex items-start gap-3">
-                        <div className="flex-1 min-w-0">
-                          {item.kind === "code" ? (
-                            <pre className="whitespace-pre-wrap text-sm p-3 rounded-lg border-0 bg-muted/50 font-mono text-foreground">
-                              {isLongContent && !isExpanded
-                                ? truncateContent(item.content || "")
-                                : item.content}
-                            </pre>
-                          ) : shouldRenderAsMarkdown(item.content || "") ? (
-                            <div
-                              className="prose prose-sm max-w-none p-3 rounded-lg border-0 bg-muted/30 text-foreground prose-headings:text-foreground prose-p:text-foreground prose-strong:text-foreground prose-code:text-foreground prose-pre:bg-muted prose-blockquote:text-muted-foreground"
-                              dangerouslySetInnerHTML={{
-                                __html: renderMarkdown(
-                                  isLongContent && !isExpanded
-                                    ? truncateContent(item.content || "")
-                                    : item.content || ""
-                                ),
-                              }}
-                            />
-                          ) : (
-                            <pre className="whitespace-pre-wrap text-sm p-3 rounded-lg border-0 bg-muted/30 text-foreground">
-                              {isLongContent && !isExpanded
-                                ? truncateContent(item.content || "")
-                                : item.content}
-                            </pre>
-                          )}
+                    <div className="space-y-2">
+                      {/* Content area with proper mobile sizing */}
+                      <div className="w-full">
+                        {item.kind === "code" ? (
+                          <pre className="whitespace-pre-wrap text-xs sm:text-sm p-2 sm:p-3 rounded-lg border-0 bg-muted/50 font-mono text-foreground overflow-x-auto">
+                            {isLongContent && !isExpanded
+                              ? truncateContent(item.content || "")
+                              : item.content}
+                          </pre>
+                        ) : shouldRenderAsMarkdown(item.content || "") ? (
+                          <div
+                            className="prose prose-xs sm:prose-sm max-w-none p-2 sm:p-3 rounded-lg border-0 bg-muted/30 text-foreground prose-headings:text-foreground prose-p:text-foreground prose-strong:text-foreground prose-code:text-xs prose-code:text-foreground prose-pre:bg-muted prose-pre:text-xs prose-blockquote:text-muted-foreground [&>*]:break-words [&>pre]:overflow-x-auto [&>pre]:max-w-full [&>code]:text-xs [&>p]:text-xs sm:[&>p]:text-sm [&>h1]:text-sm sm:[&>h1]:text-base [&>h2]:text-sm sm:[&>h2]:text-base [&>h3]:text-xs sm:[&>h3]:text-sm [&>ul]:text-xs sm:[&>ul]:text-sm [&>ol]:text-xs sm:[&>ol]:text-sm"
+                            dangerouslySetInnerHTML={{
+                              __html: renderMarkdown(
+                                isLongContent && !isExpanded
+                                  ? truncateContent(item.content || "")
+                                  : item.content || ""
+                              ),
+                            }}
+                          />
+                        ) : (
+                          <pre className="whitespace-pre-wrap text-xs sm:text-sm p-2 sm:p-3 rounded-lg border-0 bg-muted/30 text-foreground overflow-x-auto break-words">
+                            {isLongContent && !isExpanded
+                              ? truncateContent(item.content || "")
+                              : item.content}
+                          </pre>
+                        )}
+                      </div>
 
-                          {/* Bottom info bar */}
-                          <div className="flex items-center justify-between mt-2 text-xs text-muted-foreground">
-                            <div className="flex items-center gap-3">
-                              <span>
-                                {item.content?.length || 0} characters
-                              </span>
-                              {isLongContent && (
-                                <Button
-                                  size="sm"
-                                  variant="ghost"
-                                  onClick={() => toggleExpanded(item.id)}
-                                  className="h-6 px-2 text-xs hover:bg-muted/50"
-                                >
-                                  {isExpanded ? (
-                                    <>
-                                      <ChevronDown className="h-3 w-3 mr-1" />
-                                      Collapse
-                                    </>
-                                  ) : (
-                                    <>
-                                      <ChevronRight className="h-3 w-3 mr-1" />
-                                      Expand
-                                    </>
-                                  )}
-                                </Button>
+                      {/* Bottom info and actions bar */}
+                      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 text-xs text-muted-foreground">
+                        <div className="flex items-center gap-2 sm:gap-3">
+                          <span>{item.content?.length || 0} characters</span>
+                          {isLongContent && (
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => toggleExpanded(item.id)}
+                              className="h-6 px-2 text-xs hover:bg-muted/50"
+                            >
+                              {isExpanded ? (
+                                <>
+                                  <ChevronDown className="h-3 w-3 mr-1" />
+                                  Collapse
+                                </>
+                              ) : (
+                                <>
+                                  <ChevronRight className="h-3 w-3 mr-1" />
+                                  Expand
+                                </>
                               )}
-                            </div>
-                          </div>
+                            </Button>
+                          )}
                         </div>
 
-                        {/* Copy button - positioned on the right */}
+                        {/* Copy button moved to bottom right */}
                         <Button
                           size="sm"
                           variant="ghost"
                           onClick={() =>
                             copyToClipboard(item.content || "", item.id)
                           }
-                          className="h-8 w-8 p-0 hover:bg-muted/50 flex-shrink-0 mt-3"
+                          className="h-8 px-3 hover:bg-muted/50 text-xs self-end sm:self-auto"
                           title="Copy content"
                         >
                           {isCopied ? (
-                            <Check className="h-4 w-4 text-green-500" />
+                            <>
+                              <Check className="h-3 w-3 mr-1 text-green-500" />
+                              Copied
+                            </>
                           ) : (
-                            <Copy className="h-4 w-4" />
+                            <>
+                              <Copy className="h-3 w-3 mr-1" />
+                              Copy
+                            </>
                           )}
                         </Button>
                       </div>
@@ -1026,6 +1057,64 @@ export default function ItemsList({ code }: { code: string }) {
           })}
         </div>
       )}
+
+      {/* Session Expired Dialog */}
+      <AlertDialog
+        open={sessionExpiredOpen}
+        onOpenChange={setSessionExpiredOpen}
+      >
+        <AlertDialogContent className="max-w-md">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-center">
+              Session Expired
+            </AlertDialogTitle>
+            <AlertDialogDescription className="text-center">
+              Your session has expired or was cleaned up. You'll be redirected
+              to the home page.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="justify-center">
+            <AlertDialogAction
+              onClick={() => {
+                setSessionExpiredOpen(false);
+                window.location.href = "/";
+              }}
+              className="w-full"
+            >
+              Go to Home
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Session Killed Dialog */}
+      <AlertDialog open={sessionKilledOpen} onOpenChange={setSessionKilledOpen}>
+        <AlertDialogContent className="max-w-md">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-center text-destructive">
+              Session Terminated
+            </AlertDialogTitle>
+            <AlertDialogDescription className="text-center">
+              The session has been terminated by the host.
+              <br />
+              <span className="font-medium mt-2 block">
+                Redirecting in {killCountdown} seconds...
+              </span>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="justify-center">
+            <AlertDialogAction
+              onClick={() => {
+                setSessionKilledOpen(false);
+                window.location.href = "/";
+              }}
+              className="w-full"
+            >
+              Go to Home Now
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
