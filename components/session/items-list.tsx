@@ -14,6 +14,8 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { getSupabaseBrowserWithCode } from "@/lib/supabase/client";
+import { subscribeToGlobalRefresh } from "@/lib/globalRefresh";
+import { triggerGlobalRefresh } from "@/lib/globalRefresh";
 import { getOrCreateDeviceId } from "@/lib/device";
 import {
   generateSessionKey,
@@ -41,7 +43,9 @@ import {
   Calendar,
   User,
   FileIcon,
+  EyeOff,
 } from "lucide-react";
+import MaskedOverlay from "@/components/ui/masked-overlay";
 import FilePreview from "./file-preview";
 import { marked } from "marked";
 import DOMPurify from "dompurify";
@@ -384,6 +388,9 @@ export default function ItemsList({ code }: { code: string }) {
             setCanView(payload.new.can_view !== false);
             // Also trigger a data refresh to get updated device names
             fetchAndDecryptItems();
+            try {
+              triggerGlobalRefresh();
+            } catch {}
           }
         }
       )
@@ -397,7 +404,6 @@ export default function ItemsList({ code }: { code: string }) {
   useEffect(() => {
     if (!supabase || !sessionKey) return;
     let active = true;
-
     // Initial data fetch
     fetchAndDecryptItems();
 
@@ -583,16 +589,14 @@ export default function ItemsList({ code }: { code: string }) {
       })
       .subscribe();
 
-    // Add periodic refresh to ensure we don't miss anything
-    const refreshInterval = setInterval(() => {
-      if (active && autoRefreshEnabled) {
-        fetchAndDecryptItems();
-      }
-    }, autoRefreshInterval);
+    // Subscribe to global refresh events instead of using a local timer.
+    const unsubscribe = subscribeToGlobalRefresh(() => {
+      if (active && autoRefreshEnabled) fetchAndDecryptItems();
+    });
 
     return () => {
       active = false;
-      clearInterval(refreshInterval);
+      unsubscribe();
       supabase.removeChannel(itemsChannel);
       supabase.removeChannel(devicesChannel);
       supabase.removeChannel(sessionChannel);
@@ -638,16 +642,9 @@ export default function ItemsList({ code }: { code: string }) {
     );
   }
 
-  if (!canView) {
-    return (
-      <div className="flex items-center justify-center h-32 text-sm text-muted-foreground">
-        <div className="text-center">
-          <div className="text-2xl mb-2">�</div>
-          <div>You don't have permission to view shared items.</div>
-        </div>
-      </div>
-    );
-  }
+  // When view is revoked, keep rendering the UI but show a small badge and
+  // an interaction-blocking overlay so layout doesn't jump and the app
+  // appears smooth for other participants.
 
   const copyToClipboard = async (content: string, itemId?: string) => {
     try {
@@ -794,6 +791,8 @@ export default function ItemsList({ code }: { code: string }) {
 
   return (
     <div className="w-full">
+      {/* When view is disabled, keep rendering the UI and show a blocking overlay (badge moved to header to avoid duplication) */}
+      {!canView && <MaskedOverlay variant="hidden" />}
       {/* Clean minimal header */}
       <div className="flex items-center justify-between p-4 border-b border-border/30">
         <div className="flex items-center gap-3">

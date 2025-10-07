@@ -20,6 +20,8 @@ import {
 import { getSupabaseBrowserWithCode } from "@/lib/supabase/client";
 import { getOrCreateDeviceId } from "@/lib/device";
 import { generateSessionKey, decryptDeviceName } from "@/lib/encryption";
+import { subscribeToGlobalRefresh } from "@/lib/globalRefresh";
+import { triggerGlobalRefresh } from "@/lib/globalRefresh";
 import {
   Smartphone,
   Laptop,
@@ -43,6 +45,7 @@ import {
   Copy,
   Check,
 } from "lucide-react";
+import MaskedOverlay from "@/components/ui/masked-overlay";
 
 type Device = {
   id: string;
@@ -70,7 +73,6 @@ export default function DevicesPanel({ code }: { code: string }) {
     new Set()
   );
   const [refreshTrigger, setRefreshTrigger] = useState(0);
-  const [autoRefreshInterval] = useState(3000); // 3 seconds default
   const [isHost, setIsHost] = useState(false);
   const [redirectCountdown, setRedirectCountdown] = useState<number | null>(
     null
@@ -199,10 +201,10 @@ export default function DevicesPanel({ code }: { code: string }) {
 
     fetchDevices();
 
-    // Auto-refresh interval
-    const autoRefreshIntervalId = setInterval(() => {
+    // Subscribe to global refresh events instead of using a local interval.
+    const unsubscribeRefresh = subscribeToGlobalRefresh(() => {
       fetchDevices();
-    }, autoRefreshInterval);
+    });
 
     // setup real-time with better error handling
     const channel = supabase
@@ -281,12 +283,12 @@ export default function DevicesPanel({ code }: { code: string }) {
     return () => {
       cancelled = true;
       if (heartbeatInterval) clearInterval(heartbeatInterval);
-      if (autoRefreshIntervalId) clearInterval(autoRefreshIntervalId);
+      if (unsubscribeRefresh) unsubscribeRefresh();
       supabase.removeChannel(channel);
       supabase.removeChannel(killChannel);
       supabase.removeChannel(deviceChannel);
     };
-  }, [supabase, code, sessionKey, refreshTrigger, autoRefreshInterval]);
+  }, [supabase, code, sessionKey, refreshTrigger, selfId]);
 
   const kick = async (deviceId: string) => {
     if (!supabase) return;
@@ -329,6 +331,9 @@ export default function DevicesPanel({ code }: { code: string }) {
       console.log("Freeze toggle result:", data);
       // Trigger component refresh
       setRefreshTrigger((prev) => prev + 1);
+      try {
+        triggerGlobalRefresh();
+      } catch {}
     } catch (e: any) {
       setError(e?.message || "Failed to update device status.");
     } finally {
@@ -353,6 +358,9 @@ export default function DevicesPanel({ code }: { code: string }) {
       console.log("View toggle result:", data);
       // Trigger component refresh
       setRefreshTrigger((prev) => prev + 1);
+      try {
+        triggerGlobalRefresh();
+      } catch {}
     } catch (e: any) {
       setError(e?.message || "Failed to update device permissions.");
     } finally {
@@ -431,7 +439,31 @@ export default function DevicesPanel({ code }: { code: string }) {
   if (!supabase) return null;
 
   return (
-    <div>
+    <div className="relative">
+      {/* Determine local device state and show global overlay/badge when
+          current device is frozen or hidden. This keeps UI consistent with
+          other components (dim + badge). */}
+      {(() => {
+        const local = devices.find((dd) => dd.device_id === selfId);
+        // Only show the full-panel overlay when the local device is hidden (can_view === false).
+        // If the device is frozen, we keep per-device frozen badges but do not block the devices panel UI.
+        if (local && local.can_view === false) {
+          return (
+            <>
+              <div className="absolute left-4 top-4 z-50">
+                <div
+                  className={`text-xs px-2 py-1 rounded-full font-medium flex items-center gap-2 bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300`}
+                >
+                  <EyeOff className="h-3 w-3" />
+                  <span>View hidden</span>
+                </div>
+              </div>
+              <MaskedOverlay variant="hidden" />
+            </>
+          );
+        }
+        return null;
+      })()}
       {redirectCountdown !== null && (
         <div className="mb-3 text-sm text-destructive bg-destructive/10 border border-destructive/20 rounded-md p-3 text-center">
           <div className="font-medium">{redirectReason}</div>

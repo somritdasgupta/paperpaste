@@ -30,6 +30,7 @@ import {
   MailCheckIcon,
 } from "lucide-react";
 import { getOrCreateDeviceId } from "@/lib/device";
+import { EyeOff, Shield } from "lucide-react";
 
 // Kill session button component
 function KillSessionButton({
@@ -100,6 +101,79 @@ function DeviceCountBadge({ code }: { code: string }) {
     <span className="absolute -top-1 -right-1 bg-primary text-primary-foreground text-xs rounded-full h-5 w-5 flex items-center justify-center">
       {count}
     </span>
+  );
+}
+
+function PermissionBadge({ code }: { code: string }) {
+  const supabase = getSupabaseBrowserWithCode(code);
+  const [state, setState] = useState<"normal" | "frozen" | "hidden">("normal");
+
+  useEffect(() => {
+    const deviceId = getOrCreateDeviceId();
+    if (!supabase || !deviceId) return;
+
+    const fetch = async () => {
+      const { data } = await supabase
+        .from("devices")
+        .select("is_frozen, can_view")
+        .eq("device_id", deviceId)
+        .eq("session_code", code)
+        .single();
+      if (data) {
+        if (data.can_view === false) setState("hidden");
+        else if (data.is_frozen) setState("frozen");
+        else setState("normal");
+      }
+    };
+
+    fetch();
+
+    const channel = supabase
+      .channel(`device-permissions-header-${deviceId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "devices",
+          filter: `device_id=eq.${deviceId}`,
+        },
+        (payload) => {
+          if (payload.new) {
+            if (payload.new.can_view === false) setState("hidden");
+            else if (payload.new.is_frozen) setState("frozen");
+            else setState("normal");
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [supabase, code]);
+
+  if (state === "normal") return null;
+
+  return (
+    <div className="absolute -top-1 -right-10">
+      <div
+        className={`text-xs px-2 py-0.5 rounded-full font-medium flex items-center gap-2 ${
+          state === "frozen"
+            ? "bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-300"
+            : "bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300"
+        }`}
+      >
+        {state === "frozen" ? (
+          <Shield className="h-3 w-3" />
+        ) : (
+          <EyeOff className="h-3 w-3" />
+        )}
+        <span className="text-[11px] font-semibold">
+          {state === "frozen" ? "Frozen" : "Hidden"}
+        </span>
+      </div>
+    </div>
   );
 }
 
@@ -267,13 +341,13 @@ export default function SessionHeader({ code }: { code: string }) {
               }}
               aria-label={`Copy session code ${code}`}
             >
-              <span className="text-xs font-bold session-code text-primary tracking-tighter">
+              <span className="text-xs font-bold session-code text-primary tracking-tighter hidden sm:inline">
                 {code}
               </span>
             </div>
           </div>
         </div>
-        <div className="flex items-center gap-1 sm:gap-2">
+        <div className="flex items-center gap-1 sm:gap-2 relative">
           <Button
             variant={copied ? "default" : "outline"}
             size="sm"
@@ -312,6 +386,7 @@ export default function SessionHeader({ code }: { code: string }) {
             <span className="hidden sm:inline text-xs">Devices</span>
             <DeviceCountBadge code={code} />
           </Button>
+          <PermissionBadge code={code} />
           <Button
             variant="default"
             size="sm"

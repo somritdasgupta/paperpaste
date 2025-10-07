@@ -24,6 +24,8 @@ import {
   Loader2,
   Send,
 } from "lucide-react";
+import MaskedOverlay from "@/components/ui/masked-overlay";
+import { triggerGlobalRefresh } from "@/lib/globalRefresh";
 
 type ItemType = "text" | "code" | "file";
 
@@ -248,6 +250,10 @@ export default function ClipboardInput({ code }: { code: string }) {
           device_id: deviceId,
         });
         if (insertError) throw insertError;
+        // Notify other components to refresh
+        try {
+          triggerGlobalRefresh();
+        } catch {}
         setFile(null);
       } else if (text.trim()) {
         // Encrypt text/code content
@@ -273,6 +279,9 @@ export default function ClipboardInput({ code }: { code: string }) {
           device_id: deviceId,
         });
         if (error) throw error;
+        try {
+          triggerGlobalRefresh();
+        } catch {}
         setText("");
       }
     } catch (e: any) {
@@ -286,165 +295,164 @@ export default function ClipboardInput({ code }: { code: string }) {
     }
   };
 
-  if (!canView) {
-    return (
-      <div className="text-center py-8 text-muted-foreground">
-        <div className="flex items-center justify-center w-12 h-12 bg-red-100 dark:bg-red-900/20 rounded-full mb-2">
-          <Shield className="h-6 w-6 text-red-600 dark:text-red-400" />
-        </div>
-        <div>You don't have permission to view this session.</div>
-      </div>
-    );
-  }
+  // NOTE: Do not short-circuit render when hidden; instead we render the UI
+  // but show a small badge and an overlay that dims and blocks interaction.
+  // This matches the frozen behavior and avoids layout jitter.
 
   return (
     <div className="space-y-4">
-      {isFrozen && (
-        <div className="bg-orange-50 dark:bg-orange-950 border border-orange-200 dark:border-orange-800 rounded-lg p-3 text-center">
-          <div className="flex items-center justify-center gap-2 text-orange-700 dark:text-orange-300">
-            <Shield className="h-4 w-4" />
-            <span className="text-sm font-medium">
-              Your clipboard is frozen by the host
-            </span>
-          </div>
-        </div>
-      )}
-
-      <form
-        onSubmit={submit}
-        className={`flex flex-col gap-2 sm:gap-3 ${
-          isFrozen ? "opacity-50 pointer-events-none" : ""
-        }`}
-      >
-        <div className="flex gap-1 sm:gap-2">
-          <Button
-            type="button"
-            variant={type === "text" ? "default" : "secondary"}
-            disabled={isFrozen}
-            onClick={() => setType("text")}
-            size="sm"
-            className="flex-1 text-xs sm:text-sm py-1.5 sm:py-2 px-2 sm:px-3"
-          >
-            <Type className="h-4 w-4" />
-            Text
-          </Button>
-          <Button
-            type="button"
-            variant={type === "code" ? "default" : "secondary"}
-            onClick={() => setType("code")}
-            size="sm"
-            className="flex-1 text-xs sm:text-sm py-1.5 sm:py-2 px-2 sm:px-3"
-          >
-            <Code className="h-4 w-4" />
-            Code
-          </Button>
-          <Button
-            type="button"
-            variant={type === "file" ? "default" : "secondary"}
-            onClick={() => setType("file")}
-            size="sm"
-            className="flex-1 text-xs sm:text-sm py-1.5 sm:py-2 px-2 sm:px-3"
-          >
-            <FileText className="h-4 w-4" />
-            File
-          </Button>
-        </div>
-
-        {type === "file" ? (
-          <div className="space-y-2">
-            <Input
-              type="file"
-              onChange={handleFileChange}
-              accept={Object.keys(SUPPORTED_FILE_TYPES).join(",")}
-              className={fileError ? "border-destructive" : ""}
-            />
-            {fileError && (
-              <div className="text-sm text-destructive bg-destructive/10 p-2 rounded-md">
-                {fileError}
-              </div>
-            )}
-            {file && !fileError && (
-              <div className="text-sm text-muted-foreground bg-muted/30 p-2 rounded-md">
-                <div className="flex justify-between items-center">
-                  <span className="truncate">{file.name}</span>
-                  <span className="text-xs ml-2 flex-shrink-0">
-                    {(file.size / 1024 / 1024).toFixed(2)}MB
-                  </span>
-                </div>
-                <div className="text-xs mt-1 text-muted-foreground">
-                  {file.type || "Unknown type"} • Max:{" "}
-                  {MAX_FILE_SIZE / 1024 / 1024}MB
-                </div>
-              </div>
-            )}
-            {/* Send button for files */}
-            <Button
-              type="submit"
-              disabled={busy || isFrozen || !sessionKey || !file || !!fileError}
-              className="w-full font-medium"
-              size="default"
+      <div className="relative">
+        {/* show inline badge only for frozen state (hidden will be indicated globally in the header) */}
+        {isFrozen && (
+          <div className="absolute left-3 top-3 z-50">
+            <div
+              className={`text-xs px-2 py-1 rounded-full font-medium flex items-center gap-2 bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-300`}
             >
-              {busy
-                ? "Encrypting & Uploading..."
-                : sessionKey
-                ? "Share File"
-                : "Loading..."}
-            </Button>
+              <Shield className="h-3 w-3" />
+              <span>Clipboard frozen</span>
+            </div>
           </div>
-        ) : (
-          <div className="relative">
-            <Textarea
-              placeholder={
-                type === "code"
-                  ? "Paste your code here...\n\nIndentation, spacing, and formatting will be preserved.\n\nPress Ctrl+Enter (Cmd+Enter on Mac) to share."
-                  : "Paste your text here...\n\nMarkdown formatting is supported.\n\nPress Ctrl+Enter (Cmd+Enter on Mac) to share."
-              }
-              value={text}
-              onChange={(e) => setText(e.target.value)}
-              onKeyDown={(e) => {
-                if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
-                  e.preventDefault();
-                  submit();
-                }
-              }}
-              className={`resize-none transition-all duration-200 pr-12 ${
-                type === "code"
-                  ? "font-mono text-xs sm:text-sm bg-muted/30 leading-relaxed"
-                  : "font-sans text-sm leading-normal"
-              }`}
-              style={{
-                height: "clamp(200px, 50vh, 400px)",
-                minHeight: "200px",
-              }}
-            />
-            {/* Inline Send Button */}
+        )}
+
+        <form onSubmit={submit} className="flex flex-col gap-2 sm:gap-3">
+          <div className="flex gap-1 sm:gap-2">
             <Button
-              type="submit"
-              disabled={busy || isFrozen || !sessionKey || !text.trim()}
+              type="button"
+              variant={type === "text" ? "default" : "secondary"}
+              disabled={isFrozen}
+              onClick={() => setType("text")}
               size="sm"
-              className="absolute bottom-3 right-3 h-8 px-3 font-medium shadow-sm"
-              title="Send (Ctrl+Enter)"
+              className="flex-1 text-xs sm:text-sm py-1.5 sm:py-2 px-2 sm:px-3"
             >
-              {busy ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <Send className="h-4 w-4" />
-              )}
+              <Type className="h-4 w-4" />
+              Text
+            </Button>
+            <Button
+              type="button"
+              variant={type === "code" ? "default" : "secondary"}
+              onClick={() => setType("code")}
+              size="sm"
+              className="flex-1 text-xs sm:text-sm py-1.5 sm:py-2 px-2 sm:px-3"
+            >
+              <Code className="h-4 w-4" />
+              Code
+            </Button>
+            <Button
+              type="button"
+              variant={type === "file" ? "default" : "secondary"}
+              onClick={() => setType("file")}
+              size="sm"
+              className="flex-1 text-xs sm:text-sm py-1.5 sm:py-2 px-2 sm:px-3"
+            >
+              <FileText className="h-4 w-4" />
+              File
             </Button>
           </div>
-        )}
 
-        {/* Keyboard shortcut info */}
-        {type !== "file" && (
-          <div className="text-xs text-muted-foreground text-center">
-            Press{" "}
-            <kbd className="px-1.5 py-0.5 bg-muted rounded text-xs">
-              Ctrl+Enter
-            </kbd>{" "}
-            to share
-          </div>
-        )}
-      </form>
+          {type === "file" ? (
+            <div className="space-y-2">
+              <Input
+                type="file"
+                onChange={handleFileChange}
+                accept={Object.keys(SUPPORTED_FILE_TYPES).join(",")}
+                className={fileError ? "border-destructive" : ""}
+              />
+              {fileError && (
+                <div className="text-sm text-destructive bg-destructive/10 p-2 rounded-md">
+                  {fileError}
+                </div>
+              )}
+              {file && !fileError && (
+                <div className="text-sm text-muted-foreground bg-muted/30 p-2 rounded-md">
+                  <div className="flex justify-between items-center">
+                    <span className="truncate">{file.name}</span>
+                    <span className="text-xs ml-2 flex-shrink-0">
+                      {(file.size / 1024 / 1024).toFixed(2)}MB
+                    </span>
+                  </div>
+                  <div className="text-xs mt-1 text-muted-foreground">
+                    {file.type || "Unknown type"} • Max:{" "}
+                    {MAX_FILE_SIZE / 1024 / 1024}MB
+                  </div>
+                </div>
+              )}
+              {/* Send button for files */}
+              <Button
+                type="submit"
+                disabled={
+                  busy || isFrozen || !sessionKey || !file || !!fileError
+                }
+                className="w-full font-medium"
+                size="default"
+              >
+                {busy
+                  ? "Encrypting & Uploading..."
+                  : sessionKey
+                  ? "Share File"
+                  : "Loading..."}
+              </Button>
+            </div>
+          ) : (
+            <div className="relative">
+              <Textarea
+                placeholder={
+                  type === "code"
+                    ? "Paste your code here...\n\nIndentation, spacing, and formatting will be preserved.\n\nPress Ctrl+Enter (Cmd+Enter on Mac) to share."
+                    : "Paste your text here...\n\nMarkdown formatting is supported.\n\nPress Ctrl+Enter (Cmd+Enter on Mac) to share."
+                }
+                value={text}
+                onChange={(e) => setText(e.target.value)}
+                onKeyDown={(e) => {
+                  // Prevent keyboard submit when masked (frozen or hidden)
+                  if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
+                    e.preventDefault();
+                    if (isFrozen || !canView) return; // blocked by host
+                    submit();
+                  }
+                }}
+                className={`resize-none transition-all duration-200 pr-12 ${
+                  type === "code"
+                    ? "font-mono text-xs sm:text-sm bg-muted/30 leading-relaxed"
+                    : "font-sans text-sm leading-normal"
+                }`}
+                style={{
+                  height: "clamp(200px, 50vh, 400px)",
+                  minHeight: "200px",
+                }}
+              />
+              {/* Inline Send Button */}
+              <Button
+                type="submit"
+                disabled={busy || isFrozen || !sessionKey || !text.trim()}
+                size="sm"
+                className="absolute bottom-3 right-3 h-8 px-3 font-medium shadow-sm"
+                title="Send (Ctrl+Enter)"
+              >
+                {busy ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Send className="h-4 w-4" />
+                )}
+              </Button>
+            </div>
+          )}
+
+          {/* Keyboard shortcut info */}
+          {type !== "file" && (
+            <div className="text-xs text-muted-foreground text-center">
+              Press{" "}
+              <kbd className="px-1.5 py-0.5 bg-muted rounded text-xs">
+                Ctrl+Enter
+              </kbd>{" "}
+              to share
+            </div>
+          )}
+          {/* Overlay that blocks interaction when frozen or hidden */}
+          {(isFrozen || !canView) && (
+            <MaskedOverlay variant={isFrozen ? "frozen" : "hidden"} />
+          )}
+        </form>
+      </div>
     </div>
   );
 }

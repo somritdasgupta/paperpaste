@@ -6,6 +6,7 @@ import { Analytics } from "@vercel/analytics/next";
 import "./globals.css";
 
 import ThemeInit from "@/components/theme-init";
+import GlobalRefresh from "@/components/global-refresh";
 import { Suspense } from "react";
 
 import {
@@ -55,6 +56,8 @@ export default function RootLayout({
         suppressHydrationWarning={true}
       >
         <ThemeInit />
+        {/* Global refresh scheduler for the whole webapp */}
+        <GlobalRefresh interval={3000} />
         <Suspense>
           <div className="min-h-dvh flex flex-col">
             <div className="flex-1">{children}</div>
