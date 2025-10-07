@@ -44,7 +44,7 @@ export default function PairingScreen({
   const [hostDeviceName, setHostDeviceName] = useState<string | null>(null);
   const [invite, setInvite] = useState(`/session/${code}`); // Start with relative URL
   const deviceIdRef = useRef<string | null>(null);
-  
+
   // Swipe gesture state
   const [swipeX, setSwipeX] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
@@ -74,7 +74,7 @@ export default function PairingScreen({
       const buttonWidth = 56;
       const maxSwipe = containerWidth - buttonWidth - 8;
       const threshold = maxSwipe * 0.7;
-      
+
       if (swipeX >= threshold) {
         setSwipeX(maxSwipe);
         setTimeout(() => getIn(), 150);
@@ -85,13 +85,13 @@ export default function PairingScreen({
     };
 
     if (isDragging) {
-      document.addEventListener('mousemove', handleGlobalMouseMove);
-      document.addEventListener('mouseup', handleGlobalMouseUp);
+      document.addEventListener("mousemove", handleGlobalMouseMove);
+      document.addEventListener("mouseup", handleGlobalMouseUp);
     }
 
     return () => {
-      document.removeEventListener('mousemove', handleGlobalMouseMove);
-      document.removeEventListener('mouseup', handleGlobalMouseUp);
+      document.removeEventListener("mousemove", handleGlobalMouseMove);
+      document.removeEventListener("mouseup", handleGlobalMouseUp);
     };
   }, [isDragging, startX, swipeX, busy]);
 
@@ -373,37 +373,45 @@ export default function PairingScreen({
 
               {/* Mobile Swipe to Join / Desktop Button */}
               <div className="block sm:hidden">
-                <div 
+                <div
                   ref={swipeContainerRef}
                   className="relative bg-muted rounded-full p-1 h-16 overflow-hidden select-none"
-                  style={{ touchAction: 'pan-x' }}
+                  style={{ touchAction: "pan-x" }}
                 >
                   {/* Progress indicator */}
-                  <div 
+                  <div
                     className="absolute left-1 top-1 bottom-1 bg-primary/20 rounded-full transition-all duration-200 ease-out"
-                    style={{ 
-                      width: `${Math.max(0, (swipeX / (swipeContainerRef.current?.offsetWidth || 1)) * 100)}%`
+                    style={{
+                      width: `${Math.max(
+                        0,
+                        (swipeX /
+                          (swipeContainerRef.current?.offsetWidth || 1)) *
+                          100
+                      )}%`,
                     }}
                   />
                   <div className="absolute inset-0 flex items-center justify-center text-muted-foreground font-medium pointer-events-none">
                     {busy
                       ? "Connecting..."
-                      : isDragging 
+                      : isDragging
                       ? (() => {
-                          const containerWidth = swipeContainerRef.current?.offsetWidth || 0;
+                          const containerWidth =
+                            swipeContainerRef.current?.offsetWidth || 0;
                           const buttonWidth = 56;
                           const maxSwipe = containerWidth - buttonWidth - 8;
                           const threshold = maxSwipe * 0.7;
-                          return swipeX >= threshold ? "Release to join!" : "Keep swiping...";
+                          return swipeX >= threshold
+                            ? "Release to join!"
+                            : "Keep swiping...";
                         })()
                       : `Swipe to ${isNew ? "Start" : "Join"}`}
                   </div>
                   <div
                     ref={swipeButtonRef}
                     className="h-14 w-14 bg-gradient-to-r from-primary to-primary/90 rounded-full flex items-center justify-center shadow-lg touch-none transition-all duration-200 ease-out"
-                    style={{ 
+                    style={{
                       transform: `translateX(${swipeX}px)`,
-                      cursor: isDragging ? 'grabbing' : 'grab'
+                      cursor: isDragging ? "grabbing" : "grab",
                     }}
                     onTouchStart={(e) => {
                       if (busy) return;
@@ -416,23 +424,28 @@ export default function PairingScreen({
                       if (!isDragging || busy) return;
                       e.preventDefault();
                       const touch = e.touches[0];
-                      const containerWidth = swipeContainerRef.current?.offsetWidth || 0;
+                      const containerWidth =
+                        swipeContainerRef.current?.offsetWidth || 0;
                       const buttonWidth = 56; // 14 * 4 (h-14 = 56px)
                       const maxSwipe = containerWidth - buttonWidth - 8; // 8px for padding
-                      const deltaX = Math.max(0, Math.min(maxSwipe, touch.clientX - startX));
+                      const deltaX = Math.max(
+                        0,
+                        Math.min(maxSwipe, touch.clientX - startX)
+                      );
                       setSwipeX(deltaX);
                     }}
                     onTouchEnd={() => {
                       if (!isDragging || busy) return;
-                      const containerWidth = swipeContainerRef.current?.offsetWidth || 0;
+                      const containerWidth =
+                        swipeContainerRef.current?.offsetWidth || 0;
                       const buttonWidth = 56;
                       const maxSwipe = containerWidth - buttonWidth - 8;
                       const threshold = maxSwipe * 0.7; // 70% of the way
-                      
+
                       if (swipeX >= threshold) {
                         // Complete the swipe and trigger action
                         // Add haptic feedback if available
-                        if ('vibrate' in navigator) {
+                        if ("vibrate" in navigator) {
                           navigator.vibrate(50);
                         }
                         setSwipeX(maxSwipe);
