@@ -3,6 +3,7 @@ import JoinForm from "@/components/session/join-form";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { QRScanner } from "@/components/qr-scanner";
 
 function EnvBanner() {
@@ -62,39 +63,42 @@ export default function HomePage() {
   };
 
   return (
-    <main className="w-full">
-      <section className="w-full px-4 sm:px-6 lg:px-8 pt-8 sm:pt-12 pb-8 border-b bg-background">
-        <div className="mx-auto w-full max-w-7xl text-center">
-          <h1 className="text-balance text-4xl sm:text-5xl lg:text-6xl font-extrabold tracking-tight">
+    <main className="bg-gradient-to-br from-background via-background to-muted/30">
+      <section className="w-full px-4 sm:px-6 lg:px-16 xl:px-24 pt-12 sm:pt-16 pb-8">
+        <div className="w-full text-center">
+          <div className="inline-flex items-center gap-3 mb-4">
+            <div className="p-2 rounded bg-primary/10 border border-primary/20">
+              <div className="h-6 w-6 bg-primary rounded"></div>
+            </div>
+          </div>
+          <h1 className="text-balance text-4xl sm:text-5xl lg:text-6xl font-extrabold tracking-tight mb-4">
             PaperPaste
           </h1>
-          <p className="mt-4 text-pretty text-lg sm:text-xl lg:text-2xl text-muted-foreground max-w-3xl mx-auto">
-            Bold, fast - clipboard syncs across your devices in real-time.
+          <p className="mt-2 text-pretty text-lg sm:text-xl lg:text-2xl text-muted-foreground max-w-3xl mx-auto">
+            Secure, real-time clipboard syncing across all your devices.
           </p>
         </div>
       </section>
 
-      <section className="w-full px-4 sm:px-6 lg:px-8 py-8 sm:py-12">
-        <div className="mx-auto w-full max-w-4xl">
+      <section className="w-full px-4 sm:px-6 lg:px-16 xl:px-24 py-4 sm:py-6 pb-8">
+        <div className="w-full max-w-7xl mx-auto">
           <EnvBanner />
-          <div className="rounded-2xl border bg-card p-6 sm:p-8 lg:p-10 text-center">
-            <h2 className="text-2xl sm:text-3xl font-bold mb-8">
-              Start or Join a Session
-            </h2>
-            <JoinForm />
-            <div className="mt-8 flex flex-col sm:flex-row sm:items-center sm:justify-center gap-4">
-              <span className="text-muted-foreground">
-                Or scan QR code to join
-              </span>
-              <Button
-                type="button"
-                variant="secondary"
-                className="w-full sm:w-auto"
-                onClick={() => setScanOpen(true)}
-              >
-                Open QR Scanner
-              </Button>
-            </div>
+          <div className="grid lg:grid-cols-1 gap-8">
+            <Card className="p-8 sm:p-12 lg:p-16 text-center border-2 hover:border-primary/20 transition-colors">
+              <CardContent className="space-y-8">
+                <JoinForm />
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-center gap-4">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="w-full sm:w-auto border-2 hover:border-primary/20"
+                    onClick={() => setScanOpen(true)}
+                  >
+                    Scan QR to Join
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
           </div>
         </div>
       </section>

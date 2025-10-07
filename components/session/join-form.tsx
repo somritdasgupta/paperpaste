@@ -163,7 +163,7 @@ export default function JoinForm() {
             className={cn(
               "h-12 sm:h-14 md:h-16",
               "text-lg sm:text-2xl md:text-3xl",
-              "text-center font-bold tracking-widest",
+              "text-center tracking-widest session-code",
               "min-w-0 flex-1",
               validationError &&
                 "border-destructive focus-visible:ring-destructive",

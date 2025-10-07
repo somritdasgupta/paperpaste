@@ -11,6 +11,7 @@ import {
   decryptData,
   decryptDeviceName,
 } from "@/lib/encryption";
+import { Check } from "lucide-react";
 
 type Item = {
   id: string;
@@ -37,7 +38,16 @@ export default function ItemsList({ code }: { code: string }) {
   const [sessionKey, setSessionKey] = useState<CryptoKey | null>(null);
   const [expandedItems, setExpandedItems] = useState<Set<string>>(new Set());
   const [devices, setDevices] = useState<Map<string, DeviceInfo>>(new Map());
-  const deviceId = getOrCreateDeviceId();
+  const [connectionStatus, setConnectionStatus] = useState<
+    "connecting" | "connected" | "disconnected"
+  >("connecting");
+  const [error, setError] = useState<string | null>(null);
+  const [deviceId, setDeviceId] = useState<string>("");
+
+  // Initialize device ID on client side
+  useEffect(() => {
+    setDeviceId(getOrCreateDeviceId());
+  }, []);
 
   // Initialize session encryption key
   useEffect(() => {
@@ -142,25 +152,31 @@ export default function ItemsList({ code }: { code: string }) {
 
     const fetchAndDecryptItems = async () => {
       try {
+        setError(null);
+        setConnectionStatus("connecting");
+
         const { data, error } = await supabase
           .from("items")
-          .select(
-            `
-            *,
-            devices!inner(
-              device_id,
-              device_name_encrypted
-            )
-          `
-          )
+          .select("*")
           .eq("session_code", code)
           .order("created_at", { ascending: false })
           .limit(200);
 
-        if (!active || error) return;
-        if (!data) return;
+        if (!active) return;
 
-        // Decrypt content and device names for display
+        if (error) {
+          console.error("Fetch error:", error);
+          setError(error.message);
+          setConnectionStatus("disconnected");
+          return;
+        }
+
+        if (!data) {
+          setConnectionStatus("connected");
+          return;
+        }
+
+        // Decrypt content and resolve device names for display
         const decryptedItems = await Promise.all(
           data.map(async (item: any) => {
             let content = null;
@@ -173,34 +189,27 @@ export default function ItemsList({ code }: { code: string }) {
               }
             }
 
-            // Get device name from devices map or decrypt from item
+            // Get device name from devices map
             let deviceName = "Anonymous Device";
-            const deviceInfo = devices.get(item.devices?.device_id);
+            const deviceInfo = devices.get(item.device_id);
             if (deviceInfo?.device_name) {
               deviceName = deviceInfo.device_name;
-            } else if (item.devices?.device_name_encrypted) {
-              try {
-                deviceName = await decryptDeviceName(
-                  item.devices.device_name_encrypted,
-                  sessionKey
-                );
-              } catch (e) {
-                console.warn("Failed to decrypt device name:", e);
-              }
             }
 
             return {
               ...item,
               content,
-              device_id: item.devices?.device_id,
               device_name: deviceName,
             };
           })
         );
 
         setItems(decryptedItems);
-      } catch (e) {
+        setConnectionStatus("connected");
+      } catch (e: any) {
         console.error("Error fetching items:", e);
+        setError(e?.message || "Failed to fetch items");
+        setConnectionStatus("disconnected");
       }
     };
 
@@ -268,10 +277,41 @@ export default function ItemsList({ code }: { code: string }) {
       )
       .subscribe();
 
+    // Listen for session kill broadcasts
+    const sessionKillChannel = supabase
+      .channel(`session-kill-${code}`)
+      .on("broadcast", { event: "session_killed" }, (payload) => {
+        if (payload.payload.code === code) {
+          let count = 5;
+          const countdownInterval = setInterval(() => {
+            if (count <= 0) {
+              clearInterval(countdownInterval);
+              window.location.href = "/";
+              return;
+            }
+
+            setError(
+              `Session terminated by host. Redirecting in ${count} seconds...`
+            );
+            count--;
+          }, 1000);
+        }
+      })
+      .subscribe();
+
+    // Add periodic refresh to ensure we don't miss anything
+    const refreshInterval = setInterval(() => {
+      if (active) {
+        fetchAndDecryptItems();
+      }
+    }, 15000); // Refresh every 15 seconds
+
     return () => {
       active = false;
+      clearInterval(refreshInterval);
       supabase.removeChannel(itemsChannel);
       supabase.removeChannel(sessionChannel);
+      supabase.removeChannel(sessionKillChannel);
     };
   }, [supabase, code, sessionKey]);
 
@@ -287,9 +327,28 @@ export default function ItemsList({ code }: { code: string }) {
     return (
       <div className="flex items-center justify-center h-32 text-sm text-muted-foreground">
         <div className="text-center">
-          <div className="text-2xl mb-2">🔐</div>
+          <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-2"></div>
           <div>Loading encrypted session...</div>
         </div>
+      </div>
+    );
+  }
+
+  if (error && connectionStatus === "disconnected") {
+    return (
+      <div className="p-4 text-sm text-center">
+        <div className="text-destructive mb-2 font-medium">
+          Connection Error
+        </div>
+        <div className="text-muted-foreground text-xs">{error}</div>
+        <Button
+          size="sm"
+          variant="outline"
+          className="mt-2"
+          onClick={() => window.location.reload()}
+        >
+          Retry Connection
+        </Button>
       </div>
     );
   }
@@ -331,22 +390,11 @@ export default function ItemsList({ code }: { code: string }) {
     return content.substring(0, maxLength) + "...";
   };
 
-  const getDeviceIcon = (deviceName: string) => {
-    if (deviceName.includes("Phone") || deviceName.includes("Mobile"))
-      return "📱";
-    if (deviceName.includes("Tablet") || deviceName.includes("iPad"))
-      return "💻";
-    if (deviceName.includes("Desktop") || deviceName.includes("PC"))
-      return "🖥️";
-    return "📟"; // Generic device icon
-  };
-
   return (
     <div className="w-full">
       {items.length === 0 ? (
         <div className="flex items-center justify-center h-32 text-muted-foreground">
           <div className="text-center">
-            <div className="text-2xl mb-2">📋</div>
             <div>No items yet. Share something to get started!</div>
           </div>
         </div>
@@ -367,7 +415,6 @@ export default function ItemsList({ code }: { code: string }) {
                         variant={isOwnDevice ? "default" : "secondary"}
                         className="text-xs"
                       >
-                        {getDeviceIcon(item.device_name || "Unknown")}
                         {item.device_name || "Anonymous Device"}
                         {isOwnDevice && " (You)"}
                       </Badge>
@@ -389,7 +436,7 @@ export default function ItemsList({ code }: { code: string }) {
                         rel="noreferrer"
                         className="text-primary hover:underline break-all flex items-center gap-2"
                       >
-                        📎 {item.content || "Download file"}
+                        ↓ {item.content || "Download file"}
                       </a>
                       <Button
                         size="sm"
@@ -399,7 +446,7 @@ export default function ItemsList({ code }: { code: string }) {
                         }
                         className="h-8 px-3"
                       >
-                        📋 Copy Link
+                        Copy Link
                       </Button>
                     </div>
                   ) : (
@@ -424,7 +471,7 @@ export default function ItemsList({ code }: { code: string }) {
                           onClick={() => copyToClipboard(item.content || "")}
                           className="h-8 px-3"
                         >
-                          📋 Copy
+                          Copy
                         </Button>
 
                         {isLongContent && (

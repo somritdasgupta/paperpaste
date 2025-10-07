@@ -33,10 +33,12 @@ CREATE TABLE IF NOT EXISTS public.items (
   kind text NOT NULL DEFAULT 'text',
   content_encrypted text,
   file_url text,
+  device_id text,
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS idx_items_session_code_created_at ON public.items(session_code, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_items_device_id ON public.items(device_id);
 
 -- Trigger for updated_at
 CREATE OR REPLACE FUNCTION public.set_updated_at()

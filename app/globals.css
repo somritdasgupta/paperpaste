@@ -197,6 +197,16 @@
   }
 }
 
+/* Session Code Styling */
+.session-code {
+  font-family: "IBM Plex Mono", "Menlo", "Monaco", "Consolas", "Liberation Mono",
+    "Courier New", monospace;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  font-feature-settings: "tnum" 1, "lnum" 1;
+  text-rendering: optimizeLegibility;
+}
+
 /* Mobile optimizations */
 @layer utilities {
   .mobile-safe {

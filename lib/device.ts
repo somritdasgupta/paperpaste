@@ -15,6 +15,8 @@ const DEVICE_NOUNS = [
 ]
 
 export function getOrCreateDeviceId(): string {
+  if (typeof window === 'undefined') return 'server-temp-id';
+  
   const key = "pp-device-id"
   const existing = localStorage.getItem(key)
   if (existing) return existing
@@ -30,6 +32,8 @@ export function generateDeviceName(): string {
 }
 
 export function getOrCreateDeviceName(): string {
+  if (typeof window === 'undefined') return 'Server Device';
+  
   const key = "pp-device-name"
   const existing = localStorage.getItem(key)
   if (existing) return existing
@@ -49,18 +53,36 @@ export function getDeviceInfo() {
 }
 
 export function heartbeat(supabase: SupabaseClient, code: string, deviceId: string) {
-  // update last_seen every 5s for better real-time tracking; if kicked (row deleted), redirect home
+  let retryCount = 0;
+  const maxRetries = 3;
+  
+  // update last_seen every 10s with retry logic
   const update = async () => {
     try {
-      await supabase
+      const { error } = await supabase
         .from("devices")
         .update({ last_seen: new Date().toISOString() })
         .eq("session_code", code)
-        .eq("device_id", deviceId)
-    } catch {}
+        .eq("device_id", deviceId);
+      
+      if (error) {
+        console.warn("Heartbeat error:", error);
+        retryCount++;
+        
+        if (retryCount >= maxRetries) {
+          console.error("Max heartbeat retries reached, device may be disconnected");
+        }
+      } else {
+        retryCount = 0; // Reset on success
+      }
+    } catch (e) {
+      console.warn("Heartbeat failed:", e);
+      retryCount++;
+    }
   }
-  update()
-  const iv = setInterval(update, 5_000) // More frequent updates for better real-time visibility
+  
+  update(); // Initial heartbeat
+  const iv = setInterval(update, 10_000); // Every 10 seconds
 
   const ch = supabase
     .channel(`kicked-${code}-${deviceId}`)
