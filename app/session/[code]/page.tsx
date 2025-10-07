@@ -47,14 +47,14 @@ export default async function SessionPage({ params, searchParams }: Props) {
     <main className="flex flex-col min-h-screen w-full bg-background">
       {/* Header with better mobile spacing */}
       <div className="flex-none px-3 sm:px-4 lg:px-8 py-3 sm:py-4 lg:py-6 border-b">
-        <div className="mx-auto w-full max-w-7xl">
+        <div className="mx-auto w-full">
           <SessionHeader code={code} />
         </div>
       </div>
 
       {/* Main content area */}
       <div className="flex-1 flex flex-col px-3 sm:px-4 lg:px-8 py-3 sm:py-4 lg:py-6 gap-3 sm:gap-4 lg:gap-6">
-        <div className="mx-auto w-full max-w-7xl flex-1 flex flex-col gap-3 sm:gap-4 lg:gap-6">
+        <div className="mx-auto w-full flex-1 flex flex-col gap-3 sm:gap-4 lg:gap-6">
           {/* Input section */}
           <section className="flex-none rounded-lg sm:rounded-xl border bg-card p-3 sm:p-4 lg:p-6 shadow-sm">
             <ClipboardInput code={code} />

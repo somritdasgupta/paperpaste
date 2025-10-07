@@ -209,11 +209,8 @@ export default function PairingScreen({
             <CardHeader className="pb-6">
               <CardTitle className="flex items-center justify-center gap-2 text-2xl">
                 <Shield className="h-6 w-6 text-primary" />
-                Secure Connection
+                Let's Connect
               </CardTitle>
-              <CardDescription className="text-base">
-                Scan QR code or share link to connect devices
-              </CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
               <div className="relative inline-block">
@@ -243,7 +240,7 @@ export default function PairingScreen({
                 {deviceIcon()}
                 Connect This Device
               </CardTitle>
-              <CardDescription className="text-base">
+              <CardDescription className="text-base text-center">
                 {isNew ? "Start as session host" : "Join as participant"}
               </CardDescription>
             </CardHeader>
@@ -358,7 +355,7 @@ export default function PairingScreen({
         {/* Footer */}
         <div className="text-center">
           <p className="text-sm text-muted-foreground">
-            Powered by end-to-end encryption • No data stored on servers
+            PaperPaste is powered by E2E encryption • No data stored on servers
           </p>
         </div>
       </div>

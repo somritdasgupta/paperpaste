@@ -11,7 +11,21 @@ import {
   decryptData,
   decryptDeviceName,
 } from "@/lib/encryption";
-import { Check } from "lucide-react";
+import {
+  Check,
+  Copy,
+  Download,
+  ChevronDown,
+  ChevronRight,
+  Monitor,
+  Smartphone,
+  Laptop,
+  FileText,
+  Code,
+  Image,
+} from "lucide-react";
+import { marked } from "marked";
+import DOMPurify from "dompurify";
 
 type Item = {
   id: string;
@@ -43,6 +57,7 @@ export default function ItemsList({ code }: { code: string }) {
   >("connecting");
   const [error, setError] = useState<string | null>(null);
   const [deviceId, setDeviceId] = useState<string>("");
+  const [copiedItems, setCopiedItems] = useState<Set<string>>(new Set());
 
   // Initialize device ID on client side
   useEffect(() => {
@@ -155,6 +170,39 @@ export default function ItemsList({ code }: { code: string }) {
         setError(null);
         setConnectionStatus("connecting");
 
+        // First fetch all devices for this session to build device name map
+        const { data: devicesData } = await supabase
+          .from("devices")
+          .select("device_id, device_name_encrypted")
+          .eq("session_code", code);
+
+        // Build device name map with decryption
+        const deviceMap = new Map<string, DeviceInfo>();
+        if (devicesData) {
+          for (const device of devicesData) {
+            let deviceName = "Anonymous Device";
+            if (device.device_name_encrypted) {
+              try {
+                deviceName = await decryptDeviceName(
+                  device.device_name_encrypted,
+                  sessionKey
+                );
+              } catch (e) {
+                console.warn(
+                  "Failed to decrypt device name for",
+                  device.device_id
+                );
+              }
+            }
+            deviceMap.set(device.device_id, {
+              device_id: device.device_id,
+              device_name_encrypted: device.device_name_encrypted,
+              device_name: deviceName,
+            });
+          }
+        }
+        setDevices(deviceMap);
+
         const { data, error } = await supabase
           .from("items")
           .select("*")
@@ -189,9 +237,9 @@ export default function ItemsList({ code }: { code: string }) {
               }
             }
 
-            // Get device name from devices map
+            // Get device name from device map
             let deviceName = "Anonymous Device";
-            const deviceInfo = devices.get(item.device_id);
+            const deviceInfo = deviceMap.get(item.device_id);
             if (deviceInfo?.device_name) {
               deviceName = deviceInfo.device_name;
             }
@@ -215,11 +263,53 @@ export default function ItemsList({ code }: { code: string }) {
 
     fetchAndDecryptItems();
 
+    // Subscribe to device changes for real-time device name updates
+    const devicesChannel = supabase
+      .channel(`devices-${code}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "devices",
+          filter: `session_code=eq.${code}`,
+        },
+        async (payload) => {
+          const newDevice = payload.new as any;
+          if (newDevice && newDevice.device_id) {
+            let deviceName = "Anonymous Device";
+            if (newDevice.device_name_encrypted) {
+              try {
+                deviceName = await decryptDeviceName(
+                  newDevice.device_name_encrypted,
+                  sessionKey
+                );
+              } catch (e) {
+                console.warn(
+                  "Failed to decrypt device name for",
+                  newDevice.device_id
+                );
+              }
+            }
+            setDevices((prev) => {
+              const newMap = new Map(prev);
+              newMap.set(newDevice.device_id, {
+                device_id: newDevice.device_id,
+                device_name_encrypted: newDevice.device_name_encrypted,
+                device_name: deviceName,
+              });
+              return newMap;
+            });
+          }
+        }
+      )
+      .subscribe();
+
     // Enhanced real-time subscription with immediate decryption
     const itemsChannel = supabase
       .channel(`items-realtime-${code}`, {
         config: {
-          broadcast: { self: true },
+          broadcast: { self: false },
           presence: { key: code },
         },
       })
@@ -247,7 +337,19 @@ export default function ItemsList({ code }: { code: string }) {
                 content = "[Encrypted Content - Unable to Decrypt]";
               }
             }
-            const decryptedItem = { ...newItem, content };
+
+            // Get device name for the new item
+            let deviceName = "Anonymous Device";
+            const deviceInfo = devices.get(newItem.device_id);
+            if (deviceInfo?.device_name) {
+              deviceName = deviceInfo.device_name;
+            }
+
+            const decryptedItem = {
+              ...newItem,
+              content,
+              device_name: deviceName,
+            };
 
             setItems((prev) => [decryptedItem, ...prev]);
           } else {
@@ -310,6 +412,7 @@ export default function ItemsList({ code }: { code: string }) {
       active = false;
       clearInterval(refreshInterval);
       supabase.removeChannel(itemsChannel);
+      supabase.removeChannel(devicesChannel);
       supabase.removeChannel(sessionChannel);
       supabase.removeChannel(sessionKillChannel);
     };
@@ -364,10 +467,19 @@ export default function ItemsList({ code }: { code: string }) {
     );
   }
 
-  const copyToClipboard = async (content: string) => {
+  const copyToClipboard = async (content: string, itemId?: string) => {
     try {
       await navigator.clipboard.writeText(content);
-      // You could add a toast notification here
+      if (itemId) {
+        setCopiedItems((prev) => new Set(prev).add(itemId));
+        setTimeout(() => {
+          setCopiedItems((prev) => {
+            const newSet = new Set(prev);
+            newSet.delete(itemId);
+            return newSet;
+          });
+        }, 2000);
+      }
     } catch (err) {
       console.error("Failed to copy text: ", err);
     }
@@ -390,6 +502,61 @@ export default function ItemsList({ code }: { code: string }) {
     return content.substring(0, maxLength) + "...";
   };
 
+  const getDeviceIcon = (deviceName: string) => {
+    const name = deviceName.toLowerCase();
+    if (
+      name.includes("phone") ||
+      name.includes("mobile") ||
+      name.includes("android") ||
+      name.includes("iphone")
+    ) {
+      return <Smartphone className="h-3 w-3" />;
+    } else if (name.includes("laptop") || name.includes("macbook")) {
+      return <Laptop className="h-3 w-3" />;
+    }
+    return <Monitor className="h-3 w-3" />;
+  };
+
+  const getContentIcon = (kind: string) => {
+    switch (kind) {
+      case "code":
+        return <Code className="h-3 w-3" />;
+      case "file":
+        return <Download className="h-3 w-3" />;
+      default:
+        return <FileText className="h-3 w-3" />;
+    }
+  };
+
+  const renderMarkdown = (content: string) => {
+    if (typeof window === "undefined") return content;
+    try {
+      const html = marked(content, {
+        breaks: true,
+        gfm: true,
+      });
+      return DOMPurify.sanitize(html as string);
+    } catch (e) {
+      return content;
+    }
+  };
+
+  const shouldRenderAsMarkdown = (content: string) => {
+    // Check if content has markdown-like patterns
+    const markdownPatterns = [
+      /^#{1,6}\s+/, // Headers
+      /\*\*.*\*\*/, // Bold
+      /\*.*\*/, // Italic
+      /\[.*\]\(.*\)/, // Links
+      /```[\s\S]*```/, // Code blocks
+      /`.*`/, // Inline code
+      /^[-*+]\s+/m, // Lists
+      /^\d+\.\s+/m, // Numbered lists
+      /^>\s+/m, // Blockquotes
+    ];
+    return markdownPatterns.some((pattern) => pattern.test(content));
+  };
+
   return (
     <div className="w-full">
       {items.length === 0 ? (
@@ -399,28 +566,41 @@ export default function ItemsList({ code }: { code: string }) {
           </div>
         </div>
       ) : (
-        <div className="space-y-3 p-4">
+        <div className="space-y-2 p-3">
           {items.map((item) => {
             const isExpanded = expandedItems.has(item.id);
             const isLongContent = item.content && item.content.length > 200;
             const isOwnDevice = item.device_id === deviceId;
+            const isCopied = copiedItems.has(item.id);
 
             return (
-              <Card key={item.id} className="relative">
-                <div className="p-4">
+              <Card
+                key={item.id}
+                className="hover:shadow-md transition-shadow duration-200"
+              >
+                <div className="p-3">
                   {/* Header with device info and timestamp */}
-                  <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center justify-between mb-2">
                     <div className="flex items-center gap-2">
-                      <Badge
-                        variant={isOwnDevice ? "default" : "secondary"}
-                        className="text-xs"
-                      >
-                        {item.device_name || "Anonymous Device"}
-                        {isOwnDevice && " (You)"}
-                      </Badge>
-                      <Badge variant="outline" className="text-xs">
-                        {item.kind.toUpperCase()}
-                      </Badge>
+                      <div className="flex items-center gap-1">
+                        {getDeviceIcon(item.device_name || "device")}
+                        <Badge
+                          variant={isOwnDevice ? "default" : "secondary"}
+                          className="text-xs px-2 py-0.5"
+                        >
+                          {item.device_name || "Anonymous Device"}
+                          {isOwnDevice && " (You)"}
+                        </Badge>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        {getContentIcon(item.kind)}
+                        <Badge
+                          variant="outline"
+                          className="text-xs px-2 py-0.5"
+                        >
+                          {item.kind.toUpperCase()}
+                        </Badge>
+                      </div>
                     </div>
                     <div className="text-xs text-muted-foreground">
                       {new Date(item.created_at).toLocaleTimeString()}
@@ -429,65 +609,112 @@ export default function ItemsList({ code }: { code: string }) {
 
                   {/* Content */}
                   {item.kind === "file" && item.file_url ? (
-                    <div className="flex items-center justify-between">
-                      <a
-                        href={publicUrlFor(item.file_url)}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="text-primary hover:underline break-all flex items-center gap-2"
-                      >
-                        ↓ {item.content || "Download file"}
-                      </a>
+                    <div className="flex items-center justify-between gap-3 p-3 bg-muted/30 rounded-lg">
+                      <div className="flex items-center gap-2 flex-1 min-w-0">
+                        <Download className="h-4 w-4 text-primary flex-shrink-0" />
+                        <a
+                          href={publicUrlFor(item.file_url)}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-primary hover:underline truncate font-medium"
+                        >
+                          {item.content || "Download file"}
+                        </a>
+                      </div>
                       <Button
                         size="sm"
-                        variant="outline"
+                        variant="ghost"
                         onClick={() =>
-                          copyToClipboard(publicUrlFor(item.file_url || ""))
+                          copyToClipboard(
+                            publicUrlFor(item.file_url || ""),
+                            item.id
+                          )
                         }
-                        className="h-8 px-3"
+                        className="h-8 w-8 p-0 hover:bg-background"
+                        title="Copy link"
                       >
-                        Copy Link
+                        {isCopied ? (
+                          <Check className="h-4 w-4 text-green-500" />
+                        ) : (
+                          <Copy className="h-4 w-4" />
+                        )}
                       </Button>
                     </div>
                   ) : (
-                    <div className="space-y-2">
-                      <pre
-                        className={`whitespace-pre-wrap text-sm p-3 rounded-md ${
-                          item.kind === "code"
-                            ? "bg-muted font-mono border"
-                            : "bg-background"
-                        }`}
-                      >
-                        {isLongContent && !isExpanded
-                          ? truncateContent(item.content || "")
-                          : item.content}
-                      </pre>
+                    <div className="relative">
+                      <div className="flex items-start gap-3">
+                        <div className="flex-1 min-w-0">
+                          {item.kind === "code" ? (
+                            <pre className="whitespace-pre-wrap text-sm p-3 rounded-lg border-0 bg-muted/50 font-mono text-foreground">
+                              {isLongContent && !isExpanded
+                                ? truncateContent(item.content || "")
+                                : item.content}
+                            </pre>
+                          ) : shouldRenderAsMarkdown(item.content || "") ? (
+                            <div
+                              className="prose prose-sm max-w-none p-3 rounded-lg border-0 bg-muted/30 text-foreground prose-headings:text-foreground prose-p:text-foreground prose-strong:text-foreground prose-code:text-foreground prose-pre:bg-muted prose-blockquote:text-muted-foreground"
+                              dangerouslySetInnerHTML={{
+                                __html: renderMarkdown(
+                                  isLongContent && !isExpanded
+                                    ? truncateContent(item.content || "")
+                                    : item.content || ""
+                                ),
+                              }}
+                            />
+                          ) : (
+                            <pre className="whitespace-pre-wrap text-sm p-3 rounded-lg border-0 bg-muted/30 text-foreground">
+                              {isLongContent && !isExpanded
+                                ? truncateContent(item.content || "")
+                                : item.content}
+                            </pre>
+                          )}
 
-                      {/* Action buttons */}
-                      <div className="flex items-center gap-2">
+                          {/* Bottom info bar */}
+                          <div className="flex items-center justify-between mt-2 text-xs text-muted-foreground">
+                            <div className="flex items-center gap-3">
+                              <span>
+                                {item.content?.length || 0} characters
+                              </span>
+                              {isLongContent && (
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  onClick={() => toggleExpanded(item.id)}
+                                  className="h-6 px-2 text-xs hover:bg-muted/50"
+                                >
+                                  {isExpanded ? (
+                                    <>
+                                      <ChevronDown className="h-3 w-3 mr-1" />
+                                      Collapse
+                                    </>
+                                  ) : (
+                                    <>
+                                      <ChevronRight className="h-3 w-3 mr-1" />
+                                      Expand
+                                    </>
+                                  )}
+                                </Button>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Copy button - positioned on the right */}
                         <Button
                           size="sm"
-                          variant="outline"
-                          onClick={() => copyToClipboard(item.content || "")}
-                          className="h-8 px-3"
+                          variant="ghost"
+                          onClick={() =>
+                            copyToClipboard(item.content || "", item.id)
+                          }
+                          className="h-8 w-8 p-0 hover:bg-muted/50 flex-shrink-0 mt-3"
+                          title="Copy content"
                         >
-                          Copy
+                          {isCopied ? (
+                            <Check className="h-4 w-4 text-green-500" />
+                          ) : (
+                            <Copy className="h-4 w-4" />
+                          )}
                         </Button>
-
-                        {isLongContent && (
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            onClick={() => toggleExpanded(item.id)}
-                            className="h-8 px-3"
-                          >
-                            {isExpanded ? "▼ Collapse" : "▶ Expand"}
-                          </Button>
-                        )}
-
-                        <div className="text-xs text-muted-foreground ml-auto">
-                          {item.content?.length || 0} chars
-                        </div>
                       </div>
                     </div>
                   )}

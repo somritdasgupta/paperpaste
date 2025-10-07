@@ -21,8 +21,9 @@ function EnvBanner() {
           Project Settings → Environment Variables.
         </li>
         <li>
-          Then run the SQL script in scripts/sql to create tables and the
-          storage bucket.
+          Run the SQL script in supabase/migrations/paperpaste.sql to create
+          tables and storage bucket. Safe to run on both new and existing
+          databases.
         </li>
       </ul>
     </div>
@@ -80,8 +81,8 @@ export default function HomePage() {
         </div>
       </section>
 
-      <section className="w-full px-4 sm:px-6 lg:px-16 xl:px-24 py-4 sm:py-6 pb-8">
-        <div className="w-full max-w-7xl mx-auto">
+      <section className="w-full px-4 sm:px-6 lg:px-8 py-4 sm:py-6 pb-8">
+        <div className="w-full mx-auto">
           <EnvBanner />
           <div className="grid lg:grid-cols-1 gap-8">
             <Card className="p-8 sm:p-12 lg:p-16 text-center border-2 hover:border-primary/20 transition-colors">

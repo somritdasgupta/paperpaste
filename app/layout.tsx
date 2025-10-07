@@ -60,7 +60,7 @@ export default function RootLayout({
             <div className="flex-1">{children}</div>
             {/* Site footer credits */}
             <footer className="w-full border-t bg-card">
-              <div className="mx-auto w-full max-w-5xl px-6 py-6 text-sm flex flex-col md:flex-row items-center justify-between gap-2">
+              <div className="mx-auto w-full px-6 py-6 text-sm flex flex-col md:flex-row items-center justify-between gap-2">
                 <p className="font-semibold">PaperPaste</p>
                 <p className="text-muted-foreground text-center">
                   Built by{" "}

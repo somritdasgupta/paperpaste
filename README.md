@@ -144,7 +144,8 @@ paperpaste/
 │   ├── device.ts         # Device management functions
 │   └── supabase/         # Supabase client configuration
 ├── hooks/                # Custom React hooks
-├── scripts/sql/          # Database migration scripts
+├── scripts/sql/          # Database setup scripts
+├── supabase/migrations/  # Supabase migration files
 └── public/              # Static assets
 ```
 
