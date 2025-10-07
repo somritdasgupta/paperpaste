@@ -27,6 +27,8 @@ import {
   Code,
   Image,
   RefreshCw,
+  Pause,
+  Play,
 } from "lucide-react";
 import { marked } from "marked";
 import DOMPurify from "dompurify";
@@ -80,6 +82,8 @@ export default function ItemsList({ code }: { code: string }) {
   const [deviceId, setDeviceId] = useState<string>("");
   const [copiedItems, setCopiedItems] = useState<Set<string>>(new Set());
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [autoRefreshEnabled, setAutoRefreshEnabled] = useState(true);
+  const [autoRefreshInterval, setAutoRefreshInterval] = useState(5000); // 5 seconds default
 
   // Initialize device ID on client side
   useEffect(() => {
@@ -342,20 +346,25 @@ export default function ItemsList({ code }: { code: string }) {
 
     checkViewPermission();
 
-    // Subscribe to view permission changes
+    // Subscribe to view permission changes - listen to all devices in session
     const viewChannel = supabase
-      .channel(`view-permissions-${deviceId}`)
+      .channel(`view-permissions-${code}`)
       .on(
         "postgres_changes",
         {
           event: "UPDATE",
           schema: "public",
           table: "devices",
-          filter: `device_id=eq.${deviceId}`,
+          filter: `session_code=eq.${code}`,
         },
         (payload) => {
-          if (payload.new) {
+          console.log("Device permission change detected:", payload);
+          // Check if this change affects our device
+          if (payload.new && payload.new.device_id === deviceId) {
+            console.log("Permission change for our device:", payload.new);
             setCanView(payload.new.can_view !== false);
+            // Also trigger a data refresh to get updated device names
+            fetchAndDecryptItems();
           }
         }
       )
@@ -557,10 +566,10 @@ export default function ItemsList({ code }: { code: string }) {
 
     // Add periodic refresh to ensure we don't miss anything
     const refreshInterval = setInterval(() => {
-      if (active) {
+      if (active && autoRefreshEnabled) {
         fetchAndDecryptItems();
       }
-    }, 15000); // Refresh every 15 seconds
+    }, autoRefreshInterval);
 
     return () => {
       active = false;
@@ -570,7 +579,7 @@ export default function ItemsList({ code }: { code: string }) {
       supabase.removeChannel(sessionChannel);
       supabase.removeChannel(sessionKillChannel);
     };
-  }, [supabase, code, sessionKey]);
+  }, [supabase, code, sessionKey, autoRefreshEnabled, autoRefreshInterval]);
 
   if (!supabase) {
     return (
@@ -711,6 +720,11 @@ export default function ItemsList({ code }: { code: string }) {
     return markdownPatterns.some((pattern) => pattern.test(content));
   };
 
+  // Toggle auto-refresh function
+  const toggleAutoRefresh = () => {
+    setAutoRefreshEnabled(!autoRefreshEnabled);
+  };
+
   return (
     <div className="w-full">
       {/* Header with status and refresh button */}
@@ -718,16 +732,25 @@ export default function ItemsList({ code }: { code: string }) {
         <div className="flex items-center gap-2">
           <div className="flex items-center gap-1">
             <div
-              className={`w-2 h-2 rounded-full ${
+              className={`w-2 h-2 rounded-full transition-all duration-200 ${
                 connectionStatus === "connected"
-                  ? "bg-green-500"
+                  ? `bg-green-500 ${
+                      isRefreshing
+                        ? "animate-shimmer-glow shadow-lg shadow-green-500/50"
+                        : ""
+                    }`
                   : connectionStatus === "connecting"
                   ? "bg-yellow-500 animate-pulse"
                   : "bg-red-500"
               }`}
             />
-            <span className="text-xs text-muted-foreground">
-              {connectionStatus === "connected" && "Live"}
+            <span
+              className={`text-xs text-muted-foreground transition-all duration-200 ${
+                isRefreshing ? "text-primary font-medium" : ""
+              }`}
+            >
+              {connectionStatus === "connected" &&
+                (isRefreshing ? "Refreshing..." : "Live")}
               {connectionStatus === "connecting" && "Connecting..."}
               {connectionStatus === "disconnected" && "Disconnected"}
             </span>
@@ -737,20 +760,71 @@ export default function ItemsList({ code }: { code: string }) {
               • {items.length} item{items.length !== 1 ? "s" : ""}
             </span>
           )}
+          <div className="flex items-center gap-1 ml-2">
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={toggleAutoRefresh}
+              className="h-6 w-6 p-0 hover:bg-muted/50"
+              title={
+                autoRefreshEnabled
+                  ? "Pause auto-refresh"
+                  : "Resume auto-refresh"
+              }
+            >
+              {autoRefreshEnabled ? (
+                <Pause className="h-3 w-3" />
+              ) : (
+                <Play className="h-3 w-3" />
+              )}
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={handleManualRefresh}
+              disabled={isRefreshing}
+              className={`h-6 w-6 p-0 hover:bg-muted/50 transition-all duration-200 ${
+                isRefreshing
+                  ? "bg-primary/10 border border-primary/20 animate-shimmer-glow"
+                  : ""
+              }`}
+              title="Refresh data"
+            >
+              <RefreshCw
+                className={`h-3 w-3 transition-all duration-200 ${
+                  isRefreshing
+                    ? "animate-spin text-primary scale-110"
+                    : "hover:scale-110"
+                }`}
+              />
+            </Button>
+          </div>
         </div>
-        <Button
-          size="sm"
-          variant="ghost"
-          onClick={handleManualRefresh}
-          disabled={isRefreshing}
-          className="h-8 px-2 text-xs hover:bg-muted/50"
-          title="Refresh data"
-        >
-          <RefreshCw
-            className={`h-3 w-3 mr-1 ${isRefreshing ? "animate-spin" : ""}`}
-          />
-          Refresh
-        </Button>
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-muted-foreground">Auto-refresh:</span>
+          <select
+            value={autoRefreshInterval}
+            onChange={(e) => setAutoRefreshInterval(Number(e.target.value))}
+            className="text-xs bg-background border border-border/50 rounded px-1 text-foreground hover:bg-muted/50 focus:outline-none focus:ring-2 focus:ring-primary/50"
+            title="Auto-refresh interval"
+          >
+            <option className="bg-background text-foreground" value={3000}>
+              3s
+            </option>
+            <option className="bg-background text-foreground" value={5000}>
+              5s
+            </option>
+            <option className="bg-background text-foreground" value={10000}>
+              10s
+            </option>
+            <option className="bg-background text-foreground" value={15000}>
+              15s
+            </option>
+            <option className="bg-background text-foreground" value={30000}>
+              30s
+            </option>
+          </select>
+        </div>
       </div>
 
       {items.length === 0 ? (
@@ -760,7 +834,13 @@ export default function ItemsList({ code }: { code: string }) {
           </div>
         </div>
       ) : (
-        <div className="space-y-2 p-3">
+        <div className="relative space-y-2 p-3">
+          {/* Beautiful shimmer overlay during refresh */}
+          {isRefreshing && (
+            <div className="absolute inset-0 z-10 bg-gradient-to-r from-transparent via-white/20 to-transparent dark:via-white/10 animate-shimmer pointer-events-none rounded-lg">
+              <div className="h-full w-full bg-gradient-to-r from-transparent via-primary/10 to-transparent animate-pulse opacity-60" />
+            </div>
+          )}
           {items.map((item) => {
             const isExpanded = expandedItems.has(item.id);
             const isLongContent = item.content && item.content.length > 200;
@@ -770,7 +850,11 @@ export default function ItemsList({ code }: { code: string }) {
             return (
               <Card
                 key={item.id}
-                className="hover:shadow-md transition-shadow duration-200"
+                className={`hover:shadow-md transition-all duration-200 ${
+                  isRefreshing
+                    ? "bg-gradient-to-r from-background via-muted/20 to-background animate-pulse border-primary/20"
+                    : ""
+                }`}
               >
                 <div className="p-3">
                   {/* Header with device info and timestamp */}

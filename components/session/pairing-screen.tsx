@@ -42,11 +42,12 @@ export default function PairingScreen({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [hostDeviceName, setHostDeviceName] = useState<string | null>(null);
+  const [invite, setInvite] = useState(`/session/${code}`); // Start with relative URL
   const deviceIdRef = useRef<string | null>(null);
 
-  const invite = useMemo(() => {
-    const origin = typeof window !== "undefined" ? window.location.origin : "";
-    return `${origin}/session/${code}`;
+  // Update invite URL after hydration to prevent SSR mismatch
+  useEffect(() => {
+    setInvite(`${window.location.origin}/session/${code}`);
   }, [code]);
 
   // Create session for host if new, and flag host locally
@@ -73,8 +74,17 @@ export default function PairingScreen({
 
         if (isNew) {
           localStorage.setItem(`pp-host-${code}`, "1");
-          // upsert session row if not exists
-          await supabase.from("sessions").upsert({ code }).select().single();
+          // upsert session row if not exists - wait for completion
+          const sessionResult = await supabase
+            .from("sessions")
+            .upsert({ code })
+            .select()
+            .single();
+          if (sessionResult.error) {
+            throw new Error(
+              `Failed to create session: ${sessionResult.error.message}`
+            );
+          }
         } else {
           // Fetch host device information for personalization
           const { data: hostDevice } = await supabase
@@ -132,21 +142,38 @@ export default function PairingScreen({
         m.encryptDeviceName(deviceInfo.name, sessionKey)
       );
 
-      // register device presence (idempotent)
-      // Register device with full schema
-      const deviceResult = await supabase
-        .from("devices")
-        .upsert({
-          session_code: code,
-          device_id: deviceId,
-          device_name_encrypted: encryptedDeviceName,
-          is_host: isHost as any,
-        })
-        .select()
-        .single();
+      // register device presence (idempotent) with retry logic for foreign key constraint
+      let deviceResult;
+      let retries = 3;
 
-      if (deviceResult.error) {
-        throw deviceResult.error;
+      while (retries > 0) {
+        deviceResult = await supabase
+          .from("devices")
+          .upsert({
+            session_code: code,
+            device_id: deviceId,
+            device_name_encrypted: encryptedDeviceName,
+            is_host: isHost as any,
+          })
+          .select()
+          .single();
+
+        if (!deviceResult.error) {
+          break; // Success, exit retry loop
+        }
+
+        // If it's a foreign key constraint error, wait and retry
+        if (deviceResult.error.code === "23503" && retries > 1) {
+          console.log(
+            `Foreign key constraint error, retrying... (${
+              retries - 1
+            } attempts left)`
+          );
+          await new Promise((resolve) => setTimeout(resolve, 500)); // Wait 500ms
+          retries--;
+        } else {
+          throw deviceResult.error;
+        }
       }
       // start heartbeat
       heartbeat(supabase, code, deviceId);

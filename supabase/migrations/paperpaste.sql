@@ -53,22 +53,6 @@ BEGIN
         CREATE INDEX IF NOT EXISTS idx_devices_device_id ON public.devices(device_id);
       END IF;
 
-      -- Add device_name_encrypted column if it doesn't exist
-      IF NOT EXISTS (
-        SELECT 1 FROM information_schema.columns 
-        WHERE table_name = 'devices' AND column_name = 'device_name_encrypted' AND table_schema = 'public'
-      ) THEN
-        ALTER TABLE public.devices ADD COLUMN device_name_encrypted text;
-      END IF;
-
-      -- Add last_seen column if it doesn't exist
-      IF NOT EXISTS (
-        SELECT 1 FROM information_schema.columns 
-        WHERE table_name = 'devices' AND column_name = 'last_seen' AND table_schema = 'public'
-      ) THEN
-        ALTER TABLE public.devices ADD COLUMN last_seen timestamptz DEFAULT now();
-      END IF;
-
       -- Add is_frozen column if it doesn't exist
       IF NOT EXISTS (
         SELECT 1 FROM information_schema.columns 
@@ -114,7 +98,7 @@ BEGIN
     END;
   END IF;
 
-  -- Items table
+  -- Items table with all encrypted columns
   IF NOT EXISTS (
     SELECT 1 FROM information_schema.tables 
     WHERE table_schema='public' AND table_name='items'
@@ -125,7 +109,7 @@ BEGIN
       kind text NOT NULL CHECK (kind IN ('text','code','file')),
       content text,
       file_url text,
-      -- New encrypted fields for zero-knowledge file storage
+      -- Encrypted fields for zero-knowledge storage
       content_encrypted text, -- For encrypted text/code content
       file_data_encrypted text, -- For encrypted file content as base64
       file_name_encrypted text, -- For encrypted original filename

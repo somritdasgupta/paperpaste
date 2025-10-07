@@ -21,19 +21,17 @@ import {
 // Kill session button component
 function KillSessionButton({ code }: { code: string }) {
   const [loading, setLoading] = useState(false);
+  const [isHost, setIsHost] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
+  const [confirmCode, setConfirmCode] = useState("");
   const supabase = getSupabaseBrowserWithCode(code);
-  const isHost =
-    typeof window !== "undefined" &&
-    localStorage.getItem(`pp-host-${code}`) === "1";
+
+  useEffect(() => {
+    setIsHost(localStorage.getItem(`pp-host-${code}`) === "1");
+  }, [code]);
 
   const killSession = async () => {
-    if (
-      !supabase ||
-      !confirm(
-        `Are you sure you want to kill session ${code}? This will disconnect all devices.`
-      )
-    )
-      return;
+    if (!supabase || confirmCode !== code) return;
 
     setLoading(true);
     try {
@@ -52,21 +50,65 @@ function KillSessionButton({ code }: { code: string }) {
     }
   };
 
+  const handleConfirm = () => {
+    setShowConfirm(true);
+    setConfirmCode("");
+  };
+
+  const handleCancel = () => {
+    setShowConfirm(false);
+    setConfirmCode("");
+  };
+
   if (!isHost) return null;
+
+  if (showConfirm) {
+    return (
+      <div className="flex flex-col gap-2 p-3 border border-destructive rounded-md bg-destructive/5">
+        <p className="text-xs text-destructive font-medium">
+          Type <span className="font-bold">{code}</span> to confirm termination:
+        </p>
+        <div className="flex gap-2">
+          <input
+            type="text"
+            value={confirmCode}
+            onChange={(e) => setConfirmCode(e.target.value)}
+            placeholder="Enter session code"
+            className="flex-1 px-2 py-1 text-xs border rounded focus:ring-2 focus:ring-destructive focus:border-destructive outline-none"
+            autoFocus
+          />
+          <Button
+            size="sm"
+            variant="destructive"
+            onClick={killSession}
+            disabled={loading || confirmCode !== code}
+            className="text-xs px-2 py-1"
+          >
+            {loading ? <Timer className="h-3 w-3 animate-spin" /> : "Kill"}
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={handleCancel}
+            disabled={loading}
+            className="text-xs px-2 py-1"
+          >
+            Cancel
+          </Button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <Button
       size="sm"
       variant="destructive"
-      onClick={killSession}
+      onClick={handleConfirm}
       disabled={loading}
       className="text-xs px-2 py-1"
     >
-      {loading ? (
-        <Timer className="h-3 w-3 animate-spin" />
-      ) : (
-        <Trash2 className="h-3 w-3" />
-      )}
+      <Trash2 className="h-3 w-3" />
     </Button>
   );
 }
@@ -120,6 +162,7 @@ export default function SessionHeader({ code }: { code: string }) {
   const [dark, setDark] = useState<boolean | null>(null);
   const [showDevices, setShowDevices] = useState(false);
   const [showQR, setShowQR] = useState(false);
+  const [invite, setInvite] = useState(`/session/${code}`); // Start with relative URL
 
   useEffect(() => {
     const prefersDark =
@@ -129,11 +172,9 @@ export default function SessionHeader({ code }: { code: string }) {
     const isDark = stored ? stored === "1" : prefersDark;
     document.documentElement.classList.toggle("dark", isDark);
     setDark(isDark);
-  }, []);
 
-  const invite = useMemo(() => {
-    const origin = typeof window !== "undefined" ? window.location.origin : "";
-    return `${origin}/session/${code}`;
+    // Set the full invite URL after hydration
+    setInvite(`${window.location.origin}/session/${code}`);
   }, [code]);
 
   const copy = async () => {

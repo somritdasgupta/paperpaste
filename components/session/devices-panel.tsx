@@ -71,9 +71,13 @@ export default function DevicesPanel({ code }: { code: string }) {
   const [expandedDevices, setExpandedDevices] = useState<Set<string>>(
     new Set()
   );
-  const isHost =
-    typeof window !== "undefined" &&
-    localStorage.getItem(`pp-host-${code}`) === "1";
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
+  const [autoRefreshInterval] = useState(3000); // 3 seconds default
+  const [isHost, setIsHost] = useState(false);
+
+  useEffect(() => {
+    setIsHost(localStorage.getItem(`pp-host-${code}`) === "1");
+  }, [code]);
 
   const toggleDeviceExpansion = (deviceId: string) => {
     const newExpanded = new Set(expandedDevices);
@@ -136,6 +140,8 @@ export default function DevicesPanel({ code }: { code: string }) {
 
     const fetchDevices = async () => {
       try {
+        setError(null);
+
         const { data, error } = await supabase
           .from("devices")
           .select("*")
@@ -172,6 +178,11 @@ export default function DevicesPanel({ code }: { code: string }) {
 
     fetchDevices();
 
+    // Auto-refresh interval
+    const autoRefreshIntervalId = setInterval(() => {
+      fetchDevices();
+    }, autoRefreshInterval);
+
     // setup real-time with better error handling
     const channel = supabase
       .channel(`session-devices-${code}`, {
@@ -189,7 +200,10 @@ export default function DevicesPanel({ code }: { code: string }) {
           filter: `session_code=eq.${code}`,
         },
         (payload) => {
-          console.log("Device change detected:", payload);
+          console.log("Device change detected in devices panel:", payload);
+          console.log("Event type:", payload.eventType);
+          console.log("New data:", payload.new);
+          console.log("Old data:", payload.old);
           fetchDevices();
         }
       )
@@ -219,10 +233,11 @@ export default function DevicesPanel({ code }: { code: string }) {
     return () => {
       cancelled = true;
       if (heartbeatInterval) clearInterval(heartbeatInterval);
+      if (autoRefreshIntervalId) clearInterval(autoRefreshIntervalId);
       supabase.removeChannel(channel);
       supabase.removeChannel(killChannel);
     };
-  }, [supabase, code, sessionKey]);
+  }, [supabase, code, sessionKey, refreshTrigger, autoRefreshInterval]);
 
   const kick = async (deviceId: string) => {
     if (!supabase) return;
@@ -243,14 +258,21 @@ export default function DevicesPanel({ code }: { code: string }) {
 
   const toggleFreeze = async (deviceId: string, currentStatus: boolean) => {
     if (!supabase) return;
+    console.log(
+      `Toggling freeze for device ${deviceId}: ${currentStatus} -> ${!currentStatus}`
+    );
     setLoading((prev) => ({ ...prev, [`freeze-${deviceId}`]: true }));
     try {
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from("devices")
         .update({ is_frozen: !currentStatus })
         .eq("session_code", code)
-        .eq("device_id", deviceId);
+        .eq("device_id", deviceId)
+        .select();
       if (error) throw error;
+      console.log("Freeze toggle result:", data);
+      // Trigger component refresh
+      setRefreshTrigger((prev) => prev + 1);
     } catch (e: any) {
       setError(e?.message || "Failed to update device status.");
     } finally {
@@ -260,14 +282,21 @@ export default function DevicesPanel({ code }: { code: string }) {
 
   const toggleView = async (deviceId: string, currentStatus: boolean) => {
     if (!supabase) return;
+    console.log(
+      `Toggling view for device ${deviceId}: ${currentStatus} -> ${!currentStatus}`
+    );
     setLoading((prev) => ({ ...prev, [`view-${deviceId}`]: true }));
     try {
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from("devices")
         .update({ can_view: !currentStatus })
         .eq("session_code", code)
-        .eq("device_id", deviceId);
+        .eq("device_id", deviceId)
+        .select();
       if (error) throw error;
+      console.log("View toggle result:", data);
+      // Trigger component refresh
+      setRefreshTrigger((prev) => prev + 1);
     } catch (e: any) {
       setError(e?.message || "Failed to update device permissions.");
     } finally {
@@ -396,213 +425,220 @@ export default function DevicesPanel({ code }: { code: string }) {
           {error}
         </div>
       )}
-      <ul className="flex flex-col gap-3">
-        {devices.map((d) => {
-          const timeSinceLastSeen =
-            new Date().getTime() - new Date(d.last_seen).getTime();
-          const isOnline = timeSinceLastSeen < 60000; // Within 1 minute
-          const isExpanded = expandedDevices.has(d.device_id);
 
-          return (
-            <li
-              key={d.id}
-              className="bg-card border rounded-xl p-4 hover:shadow-md transition-all duration-200"
-            >
-              {/* Main Device Info Row */}
-              <div className="flex items-center justify-between gap-3">
-                <div className="flex items-center gap-3 flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <div
-                      className={`w-3 h-3 rounded-full ${
-                        isOnline ? "bg-green-500 animate-pulse" : "bg-gray-400"
-                      }`}
-                      title={isOnline ? "Online" : "Offline"}
-                    />
-                    {getDeviceIcon(d.device_name || "")}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="text-sm font-semibold truncate">
-                        {d.device_name || `Device ${d.device_id.slice(0, 8)}`}
-                      </span>
-                      <div className="flex items-center gap-1 flex-wrap">
-                        {d.device_id === selfId && (
-                          <span className="bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300 text-xs px-2 py-0.5 rounded-full font-medium flex items-center gap-1">
-                            <UserCheck className="h-3 w-3" />
-                            You
-                          </span>
-                        )}
-                        {d.is_host && (
-                          <span className="bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-300 text-xs px-2 py-0.5 rounded-full font-medium flex items-center gap-1">
-                            <Crown className="h-3 w-3" />
-                            Host
-                          </span>
-                        )}
-                        {d.is_frozen && (
-                          <span className="bg-orange-100 text-orange-700 dark:bg-orange-900 dark:text-orange-300 text-xs px-2 py-0.5 rounded-full font-medium flex items-center gap-1">
-                            <Snowflake className="h-3 w-3" />
-                            Frozen
-                          </span>
-                        )}
-                        {d.can_view === false && (
-                          <span className="bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300 text-xs px-2 py-0.5 rounded-full font-medium flex items-center gap-1">
-                            <EyeOff className="h-3 w-3" />
-                            Hidden
-                          </span>
-                        )}
-                        {!isOnline && (
-                          <span className="text-xs text-muted-foreground flex items-center gap-1">
-                            <Clock className="h-3 w-3" />
-                            {formatLastSeen(d.last_seen)}
-                          </span>
-                        )}
-                      </div>
+      <div className="relative">
+        <ul className="flex flex-col gap-3">
+          {devices.map((d) => {
+            const timeSinceLastSeen =
+              new Date().getTime() - new Date(d.last_seen).getTime();
+            const isOnline = timeSinceLastSeen < 60000; // Within 1 minute
+            const isExpanded = expandedDevices.has(d.device_id);
+
+            return (
+              <li
+                key={d.id}
+                className="bg-card border rounded-xl p-4 hover:shadow-md transition-all duration-200"
+              >
+                {/* Main Device Info Row */}
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-3 flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <div
+                        className={`w-3 h-3 rounded-full ${
+                          isOnline
+                            ? "bg-green-500 animate-pulse"
+                            : "bg-gray-400"
+                        }`}
+                        title={isOnline ? "Online" : "Offline"}
+                      />
+                      {getDeviceIcon(d.device_name || "")}
                     </div>
-                  </div>
-                </div>
-
-                {/* Expand Button */}
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onClick={() => toggleDeviceExpansion(d.device_id)}
-                  className="h-8 w-8 p-0 rounded-full hover:bg-muted/50"
-                >
-                  {isExpanded ? (
-                    <ChevronUp className="h-4 w-4" />
-                  ) : (
-                    <ChevronDown className="h-4 w-4" />
-                  )}
-                </Button>
-              </div>
-
-              {/* Expanded Details */}
-              {isExpanded && (
-                <div className="mt-4 pt-4 border-t space-y-3">
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
-                    <div className="space-y-2">
-                      <div className="flex items-center gap-2 text-muted-foreground">
-                        <Info className="h-3 w-3" />
-                        <span className="font-medium">Device Details</span>
-                      </div>
-                      <div className="pl-5 space-y-1">
-                        <div>
-                          <span className="text-xs text-muted-foreground">
-                            Device ID:
-                          </span>
-                          <p className="font-mono text-xs text-foreground break-all">
-                            {d.device_id}
-                          </p>
-                        </div>
-                        <div>
-                          <span className="text-xs text-muted-foreground">
-                            Joined:
-                          </span>
-                          <p className="text-xs">
-                            {new Date(d.created_at).toLocaleString()}
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-                    <div className="space-y-2">
-                      <div className="flex items-center gap-2 text-muted-foreground">
-                        <Globe className="h-3 w-3" />
-                        <span className="font-medium">Connection Info</span>
-                      </div>
-                      <div className="pl-5 space-y-1">
-                        <div>
-                          <span className="text-xs text-muted-foreground">
-                            Status:
-                          </span>
-                          <p className="text-xs">
-                            {isOnline ? "Active" : "Inactive"}
-                          </p>
-                        </div>
-                        <div>
-                          <span className="text-xs text-muted-foreground">
-                            Last Activity:
-                          </span>
-                          <p className="text-xs">
-                            {new Date(d.last_seen).toLocaleString()}
-                          </p>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-sm font-semibold truncate">
+                          {d.device_name || `Device ${d.device_id.slice(0, 8)}`}
+                        </span>
+                        <div className="flex items-center gap-1 flex-wrap">
+                          {d.device_id === selfId && (
+                            <span className="bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300 text-xs px-2 py-0.5 rounded-full font-medium flex items-center gap-1">
+                              <UserCheck className="h-3 w-3" />
+                              You
+                            </span>
+                          )}
+                          {d.is_host && (
+                            <span className="bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-300 text-xs px-2 py-0.5 rounded-full font-medium flex items-center gap-1">
+                              <Crown className="h-3 w-3" />
+                              Host
+                            </span>
+                          )}
+                          {d.is_frozen && (
+                            <span className="bg-orange-100 text-orange-700 dark:bg-orange-900 dark:text-orange-300 text-xs px-2 py-0.5 rounded-full font-medium flex items-center gap-1">
+                              <Snowflake className="h-3 w-3" />
+                              Frozen
+                            </span>
+                          )}
+                          {d.can_view === false && (
+                            <span className="bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300 text-xs px-2 py-0.5 rounded-full font-medium flex items-center gap-1">
+                              <EyeOff className="h-3 w-3" />
+                              Hidden
+                            </span>
+                          )}
+                          {!isOnline && (
+                            <span className="text-xs text-muted-foreground flex items-center gap-1">
+                              <Clock className="h-3 w-3" />
+                              {formatLastSeen(d.last_seen)}
+                            </span>
+                          )}
                         </div>
                       </div>
                     </div>
                   </div>
-                </div>
-              )}
 
-              {/* Action Buttons Row */}
-              <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap justify-end sm:justify-start mt-3 pt-3 border-t">
-                {/* Leave button for current user */}
-                {d.device_id === selfId && (
+                  {/* Expand Button */}
                   <Button
                     size="sm"
-                    variant="outline"
-                    onClick={() =>
-                      leaveSession(d.device_id, d.is_host || false)
-                    }
-                    disabled={loading[`leave-${d.device_id}`]}
-                    className="text-xs px-2 py-1 border-orange-300 text-orange-700 hover:bg-orange-50"
+                    variant="ghost"
+                    onClick={() => toggleDeviceExpansion(d.device_id)}
+                    className="h-8 w-8 p-0 rounded-full hover:bg-muted/50"
                   >
-                    {loading[`leave-${d.device_id}`] ? "..." : "Leave Session"}
+                    {isExpanded ? (
+                      <ChevronUp className="h-4 w-4" />
+                    ) : (
+                      <ChevronDown className="h-4 w-4" />
+                    )}
                   </Button>
+                </div>
+
+                {/* Expanded Details */}
+                {isExpanded && (
+                  <div className="mt-4 pt-4 border-t space-y-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                      <div className="space-y-2">
+                        <div className="flex items-center gap-2 text-muted-foreground">
+                          <Info className="h-3 w-3" />
+                          <span className="font-medium">Device Details</span>
+                        </div>
+                        <div className="pl-5 space-y-1">
+                          <div>
+                            <span className="text-xs text-muted-foreground">
+                              Device ID:
+                            </span>
+                            <p className="font-mono text-xs text-foreground break-all">
+                              {d.device_id}
+                            </p>
+                          </div>
+                          <div>
+                            <span className="text-xs text-muted-foreground">
+                              Joined:
+                            </span>
+                            <p className="text-xs">
+                              {new Date(d.created_at).toLocaleString()}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="space-y-2">
+                        <div className="flex items-center gap-2 text-muted-foreground">
+                          <Globe className="h-3 w-3" />
+                          <span className="font-medium">Connection Info</span>
+                        </div>
+                        <div className="pl-5 space-y-1">
+                          <div>
+                            <span className="text-xs text-muted-foreground">
+                              Status:
+                            </span>
+                            <p className="text-xs">
+                              {isOnline ? "Active" : "Inactive"}
+                            </p>
+                          </div>
+                          <div>
+                            <span className="text-xs text-muted-foreground">
+                              Last Activity:
+                            </span>
+                            <p className="text-xs">
+                              {new Date(d.last_seen).toLocaleString()}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
                 )}
 
-                {/* Host controls for other devices */}
-                {isHost && d.device_id !== selfId && (
-                  <>
-                    <Button
-                      size="sm"
-                      variant={d.is_frozen ? "default" : "outline"}
-                      onClick={() =>
-                        toggleFreeze(d.device_id, d.is_frozen || false)
-                      }
-                      disabled={loading[`freeze-${d.device_id}`]}
-                      className="text-xs px-2 py-1"
-                    >
-                      {loading[`freeze-${d.device_id}`]
-                        ? "..."
-                        : d.is_frozen
-                        ? "Unfreeze"
-                        : "Freeze"}
-                    </Button>
+                {/* Action Buttons Row */}
+                <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap justify-end sm:justify-start mt-3 pt-3 border-t">
+                  {/* Leave button for current user */}
+                  {d.device_id === selfId && (
                     <Button
                       size="sm"
                       variant="outline"
                       onClick={() =>
-                        toggleView(d.device_id, d.can_view !== false)
+                        leaveSession(d.device_id, d.is_host || false)
                       }
-                      disabled={loading[`view-${d.device_id}`]}
-                      className="text-xs px-2 py-1"
+                      disabled={loading[`leave-${d.device_id}`]}
+                      className="text-xs px-2 py-1 border-orange-300 text-orange-700 hover:bg-orange-50"
                     >
-                      {loading[`view-${d.device_id}`]
+                      {loading[`leave-${d.device_id}`]
                         ? "..."
-                        : d.can_view === false
-                        ? "Show"
-                        : "Hide"}
+                        : "Leave Session"}
                     </Button>
-                    <Button
-                      size="sm"
-                      variant="destructive"
-                      onClick={() => kick(d.device_id)}
-                      disabled={loading[d.device_id]}
-                      className="text-xs px-2 py-1"
-                    >
-                      {loading[d.device_id] ? "..." : "Remove"}
-                    </Button>
-                  </>
-                )}
-              </div>
+                  )}
+
+                  {/* Host controls for other devices */}
+                  {isHost && d.device_id !== selfId && (
+                    <>
+                      <Button
+                        size="sm"
+                        variant={d.is_frozen ? "default" : "outline"}
+                        onClick={() =>
+                          toggleFreeze(d.device_id, d.is_frozen || false)
+                        }
+                        disabled={loading[`freeze-${d.device_id}`]}
+                        className="text-xs px-2 py-1"
+                      >
+                        {loading[`freeze-${d.device_id}`]
+                          ? "..."
+                          : d.is_frozen
+                          ? "Unfreeze"
+                          : "Freeze"}
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() =>
+                          toggleView(d.device_id, d.can_view !== false)
+                        }
+                        disabled={loading[`view-${d.device_id}`]}
+                        className="text-xs px-2 py-1"
+                      >
+                        {loading[`view-${d.device_id}`]
+                          ? "..."
+                          : d.can_view === false
+                          ? "Show"
+                          : "Hide"}
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="destructive"
+                        onClick={() => kick(d.device_id)}
+                        disabled={loading[d.device_id]}
+                        className="text-xs px-2 py-1"
+                      >
+                        {loading[d.device_id] ? "..." : "Remove"}
+                      </Button>
+                    </>
+                  )}
+                </div>
+              </li>
+            );
+          })}
+          {devices.length === 0 && !error && (
+            <li className="text-center text-muted-foreground text-sm py-4">
+              No devices connected yet.
             </li>
-          );
-        })}
-        {devices.length === 0 && !error && (
-          <li className="text-center text-muted-foreground text-sm py-4">
-            No devices connected yet.
-          </li>
-        )}
-      </ul>
+          )}
+        </ul>
+      </div>
 
       {/* Host Transfer Dialog */}
       <Dialog open={showTransferHost} onOpenChange={setShowTransferHost}>

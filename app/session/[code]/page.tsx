@@ -62,18 +62,6 @@ export default async function SessionPage({ params, searchParams }: Props) {
 
           {/* Items section with better mobile layout */}
           <section className="flex-1 rounded-lg sm:rounded-xl border bg-card overflow-hidden flex flex-col shadow-sm min-h-0">
-            <div className="flex-none p-3 sm:p-4 border-b bg-muted/30 flex items-center justify-between">
-              <h3 className="text-xs sm:text-sm font-semibold text-muted-foreground">
-                Shared Items
-              </h3>
-              <div className="flex items-center gap-2">
-                <div
-                  className="w-2 h-2 bg-green-500 rounded-full animate-pulse"
-                  title="Real-time sync active"
-                ></div>
-                <span className="text-xs text-muted-foreground">Live</span>
-              </div>
-            </div>
             <div className="flex-1 overflow-auto min-h-0">
               <Suspense
                 fallback={
