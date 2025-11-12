@@ -1,22 +1,32 @@
-import { Suspense } from "react";
+"use client";
+
+import { Suspense, useState } from "react";
 import SessionHeader from "@/components/session/session-header";
 import ClipboardInput from "@/components/session/clipboard-input";
 import ItemsList from "@/components/session/items-list";
 import PairingScreen from "@/components/session/pairing-screen";
+import { useSearchParams } from "next/navigation";
 
 type Props = {
   params: Promise<{ code: string }>;
-  searchParams: Promise<{ [k: string]: string | string[] | undefined }>;
 };
 
-export default async function SessionPage({ params, searchParams }: Props) {
-  const { code } = await params;
-  const searchParamsResolved = await searchParams;
-  const joined = searchParamsResolved?.join === "1";
-  const isNew = searchParamsResolved?.new === "1";
+export default function SessionPage({ params }: Props) {
+  const [code, setCode] = useState<string>("");
+  const searchParams = useSearchParams();
+  const joined = searchParams?.get("join") === "1";
+  const isNew = searchParams?.get("new") === "1";
+
+  // Unwrap params
+  params.then((p) => setCode(p.code));
+
+  // Don't render until we have the code
+  if (!code) {
+    return null;
+  }
 
   // Basic session code format validation
-  if (!code || code.length !== 7 || !/^[A-Z0-9]{7}$/.test(code)) {
+  if (code.length !== 7 || !/^[A-Z0-9]{7}$/.test(code)) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-background via-background to-destructive/5 flex items-center justify-center p-4">
         <div className="w-full max-w-md">
@@ -44,37 +54,37 @@ export default async function SessionPage({ params, searchParams }: Props) {
   }
 
   return (
-    <main className="flex flex-col min-h-screen w-full bg-background">
-      {/* Header with better mobile spacing */}
-      <div className="flex-none px-3 sm:px-4 lg:px-8 py-3 sm:py-4 lg:py-6 border-b">
+    <main className="flex flex-col h-screen w-full bg-background overflow-hidden">
+      {/* Compact Header */}
+      <div className="flex-none px-3 sm:px-4 py-2 sm:py-3 border-b bg-card/50 backdrop-blur-sm">
         <div className="mx-auto w-full">
           <SessionHeader code={code} />
         </div>
       </div>
 
-      {/* Main content area */}
-      <div className="flex-1 flex flex-col px-3 sm:px-4 lg:px-8 py-3 sm:py-4 lg:py-6 gap-3 sm:gap-4 lg:gap-6">
-        <div className="mx-auto w-full flex-1 flex flex-col gap-3 sm:gap-4 lg:gap-6">
-          {/* Input section */}
-          <section className="flex-none rounded-lg sm:rounded-xl border bg-card p-3 sm:p-4 lg:p-6 shadow-sm">
-            <ClipboardInput code={code} />
-          </section>
+      {/* Main content area - FLIPPED LAYOUT */}
+      <div className="flex-1 flex flex-col overflow-hidden">
+        {/* History section - NOW ON TOP (takes up remaining space) */}
+        <section className="flex-1 overflow-hidden flex flex-col min-h-0">
+          <div className="flex-1 overflow-auto min-h-0">
+            <Suspense
+              fallback={
+                <div className="p-3 sm:p-4 text-xs sm:text-sm text-muted-foreground animate-pulse">
+                  Loading history…
+                </div>
+              }
+            >
+              <ItemsList code={code} />
+            </Suspense>
+          </div>
+        </section>
 
-          {/* Items section with better mobile layout */}
-          <section className="flex-1 rounded-lg sm:rounded-xl border bg-card overflow-hidden flex flex-col shadow-sm min-h-0">
-            <div className="flex-1 overflow-auto min-h-0">
-              <Suspense
-                fallback={
-                  <div className="p-3 sm:p-4 text-xs sm:text-sm text-muted-foreground animate-pulse">
-                    Loading items…
-                  </div>
-                }
-              >
-                <ItemsList code={code} />
-              </Suspense>
-            </div>
-          </section>
-        </div>
+        {/* Input section - NOW AT BOTTOM (sticky, WhatsApp-style) */}
+        <section className="flex-none border-t bg-card shadow-lg">
+          <div className="px-2 sm:px-4 py-1.5 sm:py-3">
+            <ClipboardInput code={code} />
+          </div>
+        </section>
       </div>
     </main>
   );

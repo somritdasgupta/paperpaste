@@ -281,7 +281,7 @@ export default function PairingScreen({
         {/* Header */}
         <div className="text-center mb-8">
           <div className="inline-flex items-center gap-3 mb-4">
-            <div className="p-3 rounded-2xl bg-primary/10 border border-primary/20">
+            <div className="p-3 rounded-sm bg-primary/10 border border-primary/20">
               <Globe className="h-8 w-8 text-primary" />
             </div>
             <div className="h-8 w-px bg-border" />
@@ -316,7 +316,7 @@ export default function PairingScreen({
             </CardHeader>
             <CardContent className="space-y-6">
               <div className="relative inline-block">
-                <div className="absolute -inset-4 bg-gradient-to-r from-primary/20 to-accent/20 rounded-2xl blur-lg opacity-30"></div>
+                <div className="absolute -inset-4 bg-gradient-to-r from-primary/20 to-accent/20 rounded-sm blur-lg opacity-30"></div>
                 <img
                   src={`https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=${encodeURIComponent(
                     invite
@@ -324,10 +324,10 @@ export default function PairingScreen({
                   alt="Session QR Code"
                   width={240}
                   height={240}
-                  className="relative rounded-2xl border-2 border-muted shadow-xl"
+                  className="relative rounded-sm border-2 border-muted shadow-xl"
                 />
               </div>
-              <div className="p-4 bg-muted/50 rounded-xl border">
+              <div className="p-4 bg-muted/50 rounded-sm border">
                 <p className="text-sm font-mono text-muted-foreground break-all">
                   {invite}
                 </p>
@@ -349,8 +349,8 @@ export default function PairingScreen({
             <CardContent className="space-y-6">
               {/* Features */}
               <div className="space-y-4">
-                <div className="flex items-center gap-3 p-3 rounded-lg bg-primary/5 border border-primary/10">
-                  <div className="p-2 rounded-lg bg-primary/10">
+                <div className="flex items-center gap-3 p-3 rounded-sm bg-primary/5 border border-primary/10">
+                  <div className="p-2 rounded-sm bg-primary/10">
                     <Zap className="h-4 w-4 text-primary" />
                   </div>
                   <div>
@@ -360,8 +360,8 @@ export default function PairingScreen({
                     </p>
                   </div>
                 </div>
-                <div className="flex items-center gap-3 p-3 rounded-lg bg-green-500/5 border border-green-500/10">
-                  <div className="p-2 rounded-lg bg-green-500/10">
+                <div className="flex items-center gap-3 p-3 rounded-sm bg-green-500/5 border border-green-500/10">
+                  <div className="p-2 rounded-sm bg-green-500/10">
                     <Shield className="h-4 w-4 text-green-600" />
                   </div>
                   <div>
@@ -373,8 +373,8 @@ export default function PairingScreen({
                     </p>
                   </div>
                 </div>
-                <div className="flex items-center gap-3 p-3 rounded-lg bg-blue-500/5 border border-blue-500/10">
-                  <div className="p-2 rounded-lg bg-blue-500/10">
+                <div className="flex items-center gap-3 p-3 rounded-sm bg-blue-500/5 border border-blue-500/10">
+                  <div className="p-2 rounded-sm bg-blue-500/10">
                     <Users className="h-4 w-4 text-blue-600" />
                   </div>
                   <div>
@@ -387,8 +387,8 @@ export default function PairingScreen({
                   </div>
                 </div>
                 {isNew && (
-                  <div className="flex items-center gap-3 p-3 rounded-lg bg-amber-500/5 border border-amber-500/10">
-                    <div className="p-2 rounded-lg bg-amber-500/10">
+                  <div className="flex items-center gap-3 p-3 rounded-sm bg-amber-500/5 border border-amber-500/10">
+                    <div className="p-2 rounded-sm bg-amber-500/10">
                       <Crown className="h-4 w-4 text-amber-600" />
                     </div>
                     <div>
@@ -405,12 +405,12 @@ export default function PairingScreen({
               <div className="block sm:hidden">
                 <div
                   ref={swipeContainerRef}
-                  className="relative bg-muted rounded-full p-1 h-16 overflow-hidden select-none"
+                  className="relative bg-muted rounded-sm p-1 h-16 overflow-hidden select-none"
                   style={{ touchAction: "pan-x" }}
                 >
                   {/* Progress indicator */}
                   <div
-                    className="absolute left-1 top-1 bottom-1 bg-primary/20 rounded-full transition-all duration-200 ease-out"
+                    className="absolute left-1 top-1 bottom-1 bg-primary/20 rounded-sm transition-all duration-200 ease-out"
                     style={{
                       width: `${Math.max(
                         0,
@@ -438,7 +438,7 @@ export default function PairingScreen({
                   </div>
                   <div
                     ref={swipeButtonRef}
-                    className="h-14 w-14 bg-gradient-to-r from-primary to-primary/90 rounded-full flex items-center justify-center shadow-lg touch-none transition-all duration-200 ease-out"
+                    className="h-14 w-14 bg-gradient-to-r from-primary to-primary/90 rounded-sm flex items-center justify-center shadow-lg touch-none transition-all duration-200 ease-out"
                     style={{
                       transform: `translateX(${swipeX}px)`,
                       cursor: isDragging ? "grabbing" : "grab",
@@ -537,7 +537,7 @@ export default function PairingScreen({
               </div>
 
               {error && (
-                <div className="flex items-center gap-3 p-4 text-sm text-destructive bg-destructive/10 border border-destructive/20 rounded-xl">
+                <div className="flex items-center gap-3 p-4 text-sm text-destructive bg-destructive/10 border border-destructive/20 rounded-sm">
                   <AlertTriangle className="h-4 w-4 flex-shrink-0" />
                   <span>{error}</span>
                 </div>

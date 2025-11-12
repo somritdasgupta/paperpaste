@@ -58,6 +58,7 @@ type Device = {
   created_at: string;
   is_frozen?: boolean;
   can_view?: boolean;
+  can_export?: boolean;
 };
 
 export default function DevicesPanel({ code }: { code: string }) {
@@ -316,20 +317,26 @@ export default function DevicesPanel({ code }: { code: string }) {
 
   const toggleFreeze = async (deviceId: string, currentStatus: boolean) => {
     if (!supabase) return;
-    console.log(
-      `Toggling freeze for device ${deviceId}: ${currentStatus} -> ${!currentStatus}`
-    );
     setLoading((prev) => ({ ...prev, [`freeze-${deviceId}`]: true }));
     try {
+      const newStatus = !currentStatus;
+
+      // First broadcast the change for instant UI update
+      await supabase.channel(`view-permissions-${code}`).send({
+        type: "broadcast",
+        event: "permission_changed",
+        payload: { device_id: deviceId, is_frozen: newStatus, can_view: true },
+      });
+
+      // Then update database
       const { data, error } = await supabase
         .from("devices")
-        .update({ is_frozen: !currentStatus })
+        .update({ is_frozen: newStatus })
         .eq("session_code", code)
         .eq("device_id", deviceId)
         .select();
       if (error) throw error;
-      console.log("Freeze toggle result:", data);
-      // Trigger component refresh
+
       setRefreshTrigger((prev) => prev + 1);
       try {
         triggerGlobalRefresh();
@@ -343,20 +350,26 @@ export default function DevicesPanel({ code }: { code: string }) {
 
   const toggleView = async (deviceId: string, currentStatus: boolean) => {
     if (!supabase) return;
-    console.log(
-      `Toggling view for device ${deviceId}: ${currentStatus} -> ${!currentStatus}`
-    );
     setLoading((prev) => ({ ...prev, [`view-${deviceId}`]: true }));
     try {
+      const newStatus = !currentStatus;
+
+      // First broadcast the change for instant UI update
+      await supabase.channel(`view-permissions-${code}`).send({
+        type: "broadcast",
+        event: "permission_changed",
+        payload: { device_id: deviceId, can_view: newStatus, is_frozen: false },
+      });
+
+      // Then update database
       const { data, error } = await supabase
         .from("devices")
-        .update({ can_view: !currentStatus })
+        .update({ can_view: newStatus })
         .eq("session_code", code)
         .eq("device_id", deviceId)
         .select();
       if (error) throw error;
-      console.log("View toggle result:", data);
-      // Trigger component refresh
+
       setRefreshTrigger((prev) => prev + 1);
       try {
         triggerGlobalRefresh();
@@ -365,6 +378,39 @@ export default function DevicesPanel({ code }: { code: string }) {
       setError(e?.message || "Failed to update device permissions.");
     } finally {
       setLoading((prev) => ({ ...prev, [`view-${deviceId}`]: false }));
+    }
+  };
+
+  const toggleExport = async (deviceId: string, currentStatus: boolean) => {
+    if (!supabase) return;
+    setLoading((prev) => ({ ...prev, [`export-${deviceId}`]: true }));
+    try {
+      const newStatus = !currentStatus;
+
+      // First broadcast the change for instant UI update
+      await supabase.channel(`view-permissions-${code}`).send({
+        type: "broadcast",
+        event: "permission_changed",
+        payload: { device_id: deviceId, can_export: newStatus },
+      });
+
+      // Then update database
+      const { data, error } = await supabase
+        .from("devices")
+        .update({ can_export: newStatus })
+        .eq("session_code", code)
+        .eq("device_id", deviceId)
+        .select();
+      if (error) throw error;
+
+      setRefreshTrigger((prev) => prev + 1);
+      try {
+        triggerGlobalRefresh();
+      } catch {}
+    } catch (e: any) {
+      setError(e?.message || "Failed to update export permissions.");
+    } finally {
+      setLoading((prev) => ({ ...prev, [`export-${deviceId}`]: false }));
     }
   };
 
@@ -649,6 +695,26 @@ export default function DevicesPanel({ code }: { code: string }) {
                         : d.can_view === false
                         ? "Show"
                         : "Hide"}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant={d.can_export === false ? "default" : "outline"}
+                      onClick={() =>
+                        toggleExport(d.device_id, d.can_export !== false)
+                      }
+                      disabled={loading[`export-${d.device_id}`]}
+                      className="text-xs px-2 py-1"
+                      title={
+                        d.can_export === false
+                          ? "Allow exporting history"
+                          : "Block exporting history"
+                      }
+                    >
+                      {loading[`export-${d.device_id}`]
+                        ? "..."
+                        : d.can_export === false
+                        ? "Allow Export"
+                        : "Block Export"}
                     </Button>
                     <Button
                       size="sm"

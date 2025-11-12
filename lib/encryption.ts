@@ -283,6 +283,7 @@ export async function decryptFile(encryptedData: string, sessionKey: CryptoKey, 
 }
 
 // Create a download URL for encrypted file with preview support
+// Falls back to data URL if createObjectURL is blocked by corporate policies
 export async function createEncryptedFileDownloadUrl(encryptedData: string, sessionKey: CryptoKey, mimeType: string, fileName?: string): Promise<string> {
   const blob = await decryptFile(encryptedData, sessionKey, mimeType);
   
@@ -294,7 +295,40 @@ export async function createEncryptedFileDownloadUrl(encryptedData: string, sess
   
   // Ensure blob has correct MIME type for preview
   const correctedBlob = new Blob([blob], { type: finalMimeType });
-  return URL.createObjectURL(correctedBlob);
+  
+  // Try to create object URL first
+  try {
+    const url = URL.createObjectURL(correctedBlob);
+    
+    // Test if blob URLs work by trying to fetch (will fail on corporate networks)
+    try {
+      await fetch(url, { method: 'HEAD' });
+      return url;
+    } catch (fetchError) {
+      // If HEAD fails, revoke and fall through to data URL
+      URL.revokeObjectURL(url);
+      throw new Error('Blob URL access blocked');
+    }
+  } catch (blobError) {
+    // Fallback to data URL for restricted environments (work laptops, etc.)
+    console.warn('Blob URL blocked by security policy, using data URL fallback');
+    
+    // Read blob as ArrayBuffer
+    const arrayBuffer = await correctedBlob.arrayBuffer();
+    const bytes = new Uint8Array(arrayBuffer);
+    
+    // Convert to base64 in chunks to avoid call stack issues
+    let binary = '';
+    const chunkSize = 8192;
+    for (let i = 0; i < bytes.length; i += chunkSize) {
+      const chunk = bytes.slice(i, i + chunkSize);
+      binary += String.fromCharCode.apply(null, Array.from(chunk));
+    }
+    const base64 = btoa(binary);
+    
+    // Return as data URL (works even with strict CSP)
+    return `data:${finalMimeType};base64,${base64}`;
+  }
 }
 
 // Helper function to determine original MIME type from filename
