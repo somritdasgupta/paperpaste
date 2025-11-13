@@ -581,7 +581,7 @@ export default function ItemsList({ code }: { code: string }) {
     const itemsChannel = supabase
       .channel(`items-realtime-${code}`, {
         config: {
-          broadcast: { self: false },
+          broadcast: { self: true },
           presence: { key: code },
         },
       })
