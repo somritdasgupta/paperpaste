@@ -734,7 +734,7 @@ export default function ItemsList({ code }: { code: string }) {
 
   // Separate useEffect to handle auto-refresh state changes without resubscribing to channels
   const autoRefreshRef = useRef(autoRefreshEnabled);
-  
+
   useEffect(() => {
     autoRefreshRef.current = autoRefreshEnabled;
   }, [autoRefreshEnabled]);
