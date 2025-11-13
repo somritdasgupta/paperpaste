@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -719,7 +719,7 @@ export default function ItemsList({ code }: { code: string }) {
 
     // Subscribe to global refresh events instead of using a local timer.
     const unsubscribe = subscribeToGlobalRefresh(() => {
-      if (active && autoRefreshEnabled) fetchAndDecryptItems();
+      if (active && autoRefreshRef.current) fetchAndDecryptItems();
     });
 
     return () => {
@@ -730,18 +730,14 @@ export default function ItemsList({ code }: { code: string }) {
       supabase.removeChannel(sessionChannel);
       supabase.removeChannel(sessionKillChannel);
     };
-  }, [supabase, code, sessionKey, autoRefreshEnabled, autoRefreshInterval]);
+  }, [supabase, code, sessionKey]);
 
-  // Timer-based auto-refresh
+  // Separate useEffect to handle auto-refresh state changes without resubscribing to channels
+  const autoRefreshRef = useRef(autoRefreshEnabled);
+  
   useEffect(() => {
-    if (!autoRefreshEnabled || !sessionKey) return;
-
-    const intervalId = setInterval(() => {
-      fetchAndDecryptItems(true); // Show loading indicator
-    }, autoRefreshInterval);
-
-    return () => clearInterval(intervalId);
-  }, [autoRefreshEnabled, autoRefreshInterval, sessionKey]);
+    autoRefreshRef.current = autoRefreshEnabled;
+  }, [autoRefreshEnabled]);
 
   if (!supabase) {
     return (
