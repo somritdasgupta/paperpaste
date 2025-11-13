@@ -508,7 +508,8 @@ export default function ItemsList({ code }: { code: string }) {
           setIsFrozen(payload.payload.is_frozen === true);
           setCanDeleteItems(payload.payload.can_delete_items !== false);
           setCanExport(payload.payload.can_export !== false);
-          fetchAndDecryptItems();
+          // Trigger global refresh instead of immediately fetching
+          // This respects the auto-refresh timer
           try {
             triggerGlobalRefresh();
           } catch {}
@@ -668,17 +669,22 @@ export default function ItemsList({ code }: { code: string }) {
               file_download_url: fileDownloadUrl,
             };
 
-            setItems((prev) => [decryptedItem, ...prev]);
+            // Trigger global refresh instead of immediately updating
+            // This respects the auto-refresh timer
+            try {
+              triggerGlobalRefresh();
+            } catch {}
           } else {
             // For updates and deletes, refetch all to maintain consistency
-            if (active) fetchAndDecryptItems();
+            try {
+              triggerGlobalRefresh();
+            } catch {}
           }
         }
       )
       .subscribe((status) => {
         console.log("Items subscription status:", status);
       });
-
     const sessionChannel = supabase
       .channel(`sessions-${code}`)
       .on(
