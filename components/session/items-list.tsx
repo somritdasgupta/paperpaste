@@ -162,6 +162,20 @@ export default function ItemsList({ code }: { code: string }) {
         .select("device_id, device_name_encrypted")
         .eq("session_code", code);
 
+      // Check if current device still exists in the session
+      const currentDeviceExists = devicesData?.some(
+        (d) => d.device_id === deviceId
+      );
+
+      if (!currentDeviceExists) {
+        // Device has been removed/kicked - trigger immediate redirect
+        localStorage.removeItem(`pp-host-${code}`);
+        localStorage.removeItem(`pp-joined-${code}`);
+        setLeaveReason("kicked");
+        setIsLeaving(true);
+        return;
+      }
+
       // Build device name map with decryption
       const deviceMap = new Map<string, DeviceInfo>();
       if (devicesData) {
@@ -474,6 +488,19 @@ export default function ItemsList({ code }: { code: string }) {
           }
         }
       )
+      // Listen for instant export toggle broadcast
+      .on("broadcast", { event: "export_toggle" }, (payload) => {
+        setExportEnabled(payload.payload.export_enabled !== false);
+        try {
+          triggerGlobalRefresh();
+        } catch {}
+      })
+      .on("broadcast", { event: "deletion_toggle" }, (payload) => {
+        setAllowItemDeletion(payload.payload.allow_item_deletion !== false);
+        try {
+          triggerGlobalRefresh();
+        } catch {}
+      })
       // Listen for realtime broadcast events for instant permission changes
       .on("broadcast", { event: "permission_changed" }, (payload) => {
         if (payload.payload.device_id === deviceId) {
@@ -924,29 +951,29 @@ export default function ItemsList({ code }: { code: string }) {
 
   const getFileIcon = (mimeType?: string) => {
     if (!mimeType)
-      return <FileText className="h-5 w-5 text-muted-foreground" />;
+      return <FileText className="h-4 w-4 text-muted-foreground" />;
 
     if (mimeType.startsWith("image/")) {
-      return <Image className="h-5 w-5 text-blue-500" />;
+      return <Image className="h-4 w-4 text-blue-500" />;
     }
     if (mimeType.startsWith("video/")) {
-      return <Play className="h-5 w-5 text-purple-500" />;
+      return <Play className="h-4 w-4 text-purple-500" />;
     }
     if (mimeType.startsWith("audio/")) {
-      return <Play className="h-5 w-5 text-green-500" />;
+      return <Play className="h-4 w-4 text-green-500" />;
     }
     if (mimeType.includes("pdf")) {
-      return <FileText className="h-5 w-5 text-red-500" />;
+      return <FileText className="h-4 w-4 text-red-500" />;
     }
     if (
       mimeType.includes("code") ||
       mimeType.includes("javascript") ||
       mimeType.includes("json")
     ) {
-      return <Code className="h-5 w-5 text-yellow-500" />;
+      return <Code className="h-4 w-4 text-yellow-500" />;
     }
 
-    return <FileText className="h-5 w-5 text-muted-foreground" />;
+    return <FileText className="h-4 w-4 text-muted-foreground" />;
   };
 
   return (
@@ -963,8 +990,8 @@ export default function ItemsList({ code }: { code: string }) {
                 connectionStatus === "connected"
                   ? `bg-green-500 ${isRefreshing ? "animate-pulse" : ""}`
                   : connectionStatus === "connecting"
-                  ? "bg-yellow-500 animate-pulse"
-                  : "bg-red-500"
+                    ? "bg-yellow-500 animate-pulse"
+                    : "bg-red-500"
               }`}
             />
             <span className="text-sm font-medium text-foreground">
@@ -1017,8 +1044,8 @@ export default function ItemsList({ code }: { code: string }) {
                 isRefreshing
                   ? "animate-spin text-primary"
                   : autoRefreshEnabled
-                  ? "text-primary"
-                  : ""
+                    ? "text-primary"
+                    : ""
               }`}
             />
           </Button>
@@ -1101,82 +1128,104 @@ export default function ItemsList({ code }: { code: string }) {
                   </svg>
                 </div>
               </div>
-              <div className="text-lg font-medium">No items shared yet</div>
-              <div className="text-sm">
-                Share text, code, or files to get started
-              </div>
             </div>
           </div>
         ) : (
-          <div className="space-y-2 sm:space-y-3 p-3 sm:p-4">
+          <div className="space-y-0.5 p-1.5 sm:p-2 font-mono text-xs">
             {items.map((item) => {
               const isExpanded = expandedItems.has(item.id);
               const isLongContent = item.content && item.content.length > 200;
               const isOwnDevice = item.device_id === deviceId;
               const isCopied = copiedItems.has(item.id);
 
+              // Log-style color coding
+              const typeColors = {
+                text: "text-blue-400 dark:text-blue-500",
+                code: "text-purple-400 dark:text-purple-500",
+                file: "text-green-400 dark:text-green-500",
+              };
+              const typeBg = {
+                text: "bg-blue-500/5 hover:bg-blue-500/10",
+                code: "bg-purple-500/5 hover:bg-purple-500/10",
+                file: "bg-green-500/5 hover:bg-green-500/10",
+              };
+
               return (
-                <Card
+                <div
                   key={item.id}
-                  className="hover:shadow-md transition-all duration-200 relative overflow-hidden"
+                  className={`relative group rounded border border-border/40 ${typeBg[item.kind]} transition-colors`}
                 >
-                  {/* Shimmer effect inside each card during refresh */}
+                  {/* Shimmer effect during refresh */}
                   {isRefreshing && (
-                    <div className="absolute inset-0 z-10 bg-gradient-to-r from-transparent via-white/20 to-transparent dark:via-white/10 animate-shimmer pointer-events-none">
-                      <div className="h-full w-full bg-gradient-to-r from-transparent via-primary/10 to-transparent animate-pulse opacity-60" />
-                    </div>
+                    <div className="absolute inset-0 z-10 bg-gradient-to-r from-transparent via-white/20 to-transparent dark:via-white/5 animate-shimmer pointer-events-none rounded" />
                   )}
-                  <div className="p-3 sm:p-4 relative z-0">
-                    {/* Compact Header */}
-                    <div className="flex items-center justify-between gap-3 mb-3">
-                      <div className="flex items-center gap-2 min-w-0">
-                        {getDeviceIcon(item.device_name || "device")}
-                        <span className="text-sm font-medium text-foreground truncate">
-                          {item.device_name || "Device"}
-                          {isOwnDevice && (
-                            <span className="text-muted-foreground ml-1">
-                              (You)
-                            </span>
+
+                  {/* LOG ENTRY - Single compact line */}
+                  <div className="flex items-start gap-2 px-2 py-1.5">
+                    {/* Timestamp - Terminal style */}
+                    <div className="flex-shrink-0 text-[10px] text-muted-foreground/70 font-mono mt-0.5">
+                      {item.display_created_at ? (
+                        <span>
+                          {new Date(item.display_created_at).toLocaleTimeString(
+                            [],
+                            {
+                              hour: "2-digit",
+                              minute: "2-digit",
+                              second: "2-digit",
+                              hour12: false,
+                            }
                           )}
                         </span>
-                        <Badge
-                          variant="outline"
-                          className="text-xs h-5 px-1.5 capitalize ml-2"
-                        >
-                          {item.kind}
-                        </Badge>
-                      </div>
-                      <span className="text-xs text-muted-foreground flex-shrink-0">
-                        {new Date(item.created_at).toLocaleTimeString([], {
-                          hour: "2-digit",
-                          minute: "2-digit",
-                        })}
-                      </span>
+                      ) : (
+                        <span>--:--:--</span>
+                      )}
                     </div>
 
-                    {/* File Content - Clean & Compact */}
-                    {item.kind === "file" ? (
-                      <div className="flex items-center gap-3 p-3 bg-muted/30 rounded-lg">
-                        <div className="flex-shrink-0">
-                          {getFileIcon(item.file_mime_type)}
+                    {/* Type indicator - Single char */}
+                    <div
+                      className={`flex-shrink-0 font-bold ${typeColors[item.kind]} mt-0.5`}
+                    >
+                      {item.kind === "text"
+                        ? "T"
+                        : item.kind === "code"
+                          ? "C"
+                          : "F"}
+                    </div>
+
+                    {/* Device - Compact */}
+                    <div className="flex-shrink-0 text-[10px] text-muted-foreground/70 min-w-[60px] max-w-[80px] truncate mt-0.5">
+                      {item.device_name || "unknown"}
+                      {isOwnDevice && (
+                        <span className="text-primary ml-1">*</span>
+                      )}
+                    </div>
+
+                    {/* Content Preview - Main section */}
+                    <div className="flex-1 min-w-0">
+                      {item.kind === "file" ? (
+                        <div className="flex items-center gap-2">
+                          <span className="text-foreground/90 truncate font-medium">
+                            {item.file_name || "unknown.file"}
+                          </span>
+                          <span className="text-[10px] text-muted-foreground/60">
+                            {item.file_size
+                              ? formatFileSize(item.file_size)
+                              : ""}
+                          </span>
                         </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="font-medium text-foreground truncate text-sm">
-                            {item.file_name || "Unknown File"}
-                          </div>
-                          <div className="flex items-center gap-2 mt-0.5 text-xs text-muted-foreground">
-                            {item.file_size && (
-                              <span>{formatFileSize(item.file_size)}</span>
-                            )}
-                            {item.file_mime_type && item.file_size && (
-                              <span>•</span>
-                            )}
-                            {item.file_mime_type && (
-                              <span>{getFileType(item.file_mime_type)}</span>
-                            )}
-                          </div>
+                      ) : (
+                        <div className="text-foreground/90 truncate leading-tight">
+                          {item.content && item.content.length > 100
+                            ? item.content.substring(0, 100) + "..."
+                            : item.content}
                         </div>
-                        <div className="flex items-center gap-1 flex-shrink-0">
+                      )}
+                    </div>
+
+                    {/* Action buttons - Hover visible */}
+                    <div className="flex items-center gap-0.5 flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+                      {item.kind === "file" ? (
+                        <>
                           <FilePreview
                             fileName={item.file_name || "file"}
                             fileUrl={item.file_download_url || ""}
@@ -1205,113 +1254,85 @@ export default function ItemsList({ code }: { code: string }) {
                                 link.click();
                                 document.body.removeChild(link);
                               }}
-                              className="h-8 w-8 p-0 hover:bg-muted/50"
-                              title="Download file"
+                              className="h-5 w-5 p-0"
+                              title="Download"
                             >
-                              <Download className="h-4 w-4" />
+                              <Download className="h-2.5 w-2.5" />
                             </Button>
                           )}
-                          {allowItemDeletion && item.device_id === deviceId && (
+                        </>
+                      ) : (
+                        <>
+                          {isLongContent && (
                             <Button
                               size="sm"
                               variant="ghost"
-                              onClick={() => deleteItem(item.id)}
-                              className="h-8 w-8 p-0 hover:bg-destructive/10 hover:text-destructive transition-colors"
-                              title="Delete item"
+                              onClick={() => toggleExpanded(item.id)}
+                              className="h-5 w-5 p-0"
+                              title={isExpanded ? "Collapse" : "Expand"}
                             >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          )}
-                        </div>
-                      </div>
-                    ) : (
-                      <div>
-                        <div className="relative group">
-                          {item.kind === "code" ? (
-                            <pre className="p-3 rounded-lg bg-muted/30 text-xs sm:text-sm font-mono text-foreground overflow-x-auto scrollbar-thin">
-                              {isLongContent && !isExpanded
-                                ? truncateContent(item.content || "")
-                                : item.content}
-                            </pre>
-                          ) : shouldRenderAsMarkdown(item.content || "") ? (
-                            <div
-                              className="prose prose-xs sm:prose-sm max-w-none p-3 rounded-lg bg-muted/30 text-foreground prose-headings:text-foreground prose-p:text-foreground prose-strong:text-foreground prose-code:text-foreground prose-pre:bg-muted prose-blockquote:text-muted-foreground"
-                              dangerouslySetInnerHTML={{
-                                __html: renderMarkdown(
-                                  isLongContent && !isExpanded
-                                    ? truncateContent(item.content || "")
-                                    : item.content || ""
-                                ),
-                              }}
-                            />
-                          ) : (
-                            <div className="p-3 rounded-lg bg-muted/30 text-sm text-foreground whitespace-pre-wrap break-words">
-                              {isLongContent && !isExpanded
-                                ? truncateContent(item.content || "")
-                                : item.content}
-                            </div>
-                          )}
-                        </div>
-
-                        {/* Compact Action bar */}
-                        <div className="flex items-center justify-between gap-2 mt-2 pt-2 border-t border-border/30">
-                          <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                            <span>{item.content?.length || 0} chars</span>
-                            {isLongContent && (
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                onClick={() => toggleExpanded(item.id)}
-                                className="h-6 px-2 text-xs hover:bg-muted/50"
-                              >
-                                {isExpanded ? (
-                                  <>
-                                    <ChevronDown className="h-3 w-3" />
-                                    <span className="ml-1">Less</span>
-                                  </>
-                                ) : (
-                                  <>
-                                    <ChevronRight className="h-3 w-3" />
-                                    <span className="ml-1">More</span>
-                                  </>
-                                )}
-                              </Button>
-                            )}
-                          </div>
-                          <div className="flex items-center gap-1">
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              onClick={() =>
-                                copyToClipboard(item.content || "", item.id)
-                              }
-                              className="h-8 w-8 p-0 hover:bg-muted/50"
-                              title="Copy content"
-                            >
-                              {isCopied ? (
-                                <Check className="h-4 w-4 text-green-500" />
+                              {isExpanded ? (
+                                <ChevronDown className="h-2.5 w-2.5" />
                               ) : (
-                                <Copy className="h-4 w-4" />
+                                <ChevronRight className="h-2.5 w-2.5" />
                               )}
                             </Button>
-                            {allowItemDeletion &&
-                              item.device_id === deviceId && (
-                                <Button
-                                  size="sm"
-                                  variant="ghost"
-                                  onClick={() => deleteItem(item.id)}
-                                  className="h-8 w-8 p-0 hover:bg-destructive/10 hover:text-destructive transition-colors"
-                                  title="Delete item"
-                                >
-                                  <Trash2 className="h-4 w-4" />
-                                </Button>
-                              )}
-                          </div>
-                        </div>
-                      </div>
-                    )}
+                          )}
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() =>
+                              copyToClipboard(item.content || "", item.id)
+                            }
+                            className="h-5 w-5 p-0"
+                            title="Copy"
+                          >
+                            {isCopied ? (
+                              <Check className="h-2.5 w-2.5 text-green-500" />
+                            ) : (
+                              <Copy className="h-2.5 w-2.5" />
+                            )}
+                          </Button>
+                        </>
+                      )}
+                      {allowItemDeletion && item.device_id === deviceId && (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => deleteItem(item.id)}
+                          className="h-5 w-5 p-0 hover:text-destructive"
+                          title="Delete"
+                        >
+                          <Trash2 className="h-2.5 w-2.5" />
+                        </Button>
+                      )}
+                    </div>
                   </div>
-                </Card>
+
+                  {/* Expanded content - Only shown when clicked */}
+                  {isExpanded && item.kind !== "file" && (
+                    <div className="px-2 pb-2 pl-[120px]">
+                      <div className="border-t border-border/40 pt-1.5">
+                        {item.kind === "code" ? (
+                          <pre className="p-2 rounded bg-muted/30 text-[10px] font-mono text-foreground whitespace-pre-wrap break-words max-h-60 overflow-y-auto">
+                            {item.content}
+                          </pre>
+                        ) : shouldRenderAsMarkdown(item.content || "") ? (
+                          <div
+                            className="prose prose-sm max-w-none p-2 rounded bg-muted/30 text-[10px] prose-headings:text-xs prose-p:text-[10px] max-h-60 overflow-y-auto"
+                            dangerouslySetInnerHTML={{
+                              __html: renderMarkdown(item.content || ""),
+                            }}
+                          />
+                        ) : (
+                          <div className="p-2 rounded bg-muted/30 text-[10px] text-foreground whitespace-pre-wrap break-words max-h-60 overflow-y-auto">
+                            {item.content}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
               );
             })}
           </div>
@@ -1389,7 +1410,6 @@ export default function ItemsList({ code }: { code: string }) {
           </div>
         </div>
       )}
-      {/* Leaving countdown overlay */}
       {isLeaving && <LeavingCountdown reason={leaveReason} />}
 
       {/* Delete Confirmation Dialog */}

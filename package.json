@@ -57,6 +57,7 @@
     "next-themes": "^0.4.6",
     "pg": "latest",
     "pg-native": "latest",
+    "prettier": "^3.6.2",
     "react": "^19",
     "react-day-picker": "9.8.0",
     "react-dom": "^19",

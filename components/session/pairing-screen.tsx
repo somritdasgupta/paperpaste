@@ -340,11 +340,10 @@ export default function PairingScreen({
             <CardHeader className="pb-6">
               <CardTitle className="flex items-center justify-center gap-2 text-2xl">
                 {renderDetectedDeviceIcon()}
-                Connect This Device
+                <CardDescription className="text-base text-center">
+                  {isNew ? "Start as session host" : "Join as participant"}
+                </CardDescription>
               </CardTitle>
-              <CardDescription className="text-base text-center">
-                {isNew ? "Start as session host" : "Join as participant"}
-              </CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
               {/* Features */}
@@ -549,7 +548,7 @@ export default function PairingScreen({
         {/* Footer */}
         <div className="text-center">
           <p className="text-sm text-muted-foreground">
-            PaperPaste is powered by E2E encryption • No data stored on servers
+            PaperPaste is built on E2E encryption • No data stored on servers
           </p>
         </div>
       </div>

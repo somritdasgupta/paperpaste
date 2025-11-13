@@ -59,6 +59,7 @@ type Device = {
   is_frozen?: boolean;
   can_view?: boolean;
   can_export?: boolean;
+  can_delete_items?: boolean;
 };
 
 export default function DevicesPanel({ code }: { code: string }) {
@@ -414,6 +415,42 @@ export default function DevicesPanel({ code }: { code: string }) {
     }
   };
 
+  const toggleDeleteItems = async (
+    deviceId: string,
+    currentStatus: boolean
+  ) => {
+    if (!supabase) return;
+    setLoading((prev) => ({ ...prev, [`delete-${deviceId}`]: true }));
+    try {
+      const newStatus = !currentStatus;
+
+      // First broadcast the change for instant UI update
+      await supabase.channel(`view-permissions-${code}`).send({
+        type: "broadcast",
+        event: "permission_changed",
+        payload: { device_id: deviceId, can_delete_items: newStatus },
+      });
+
+      // Then update database
+      const { data, error } = await supabase
+        .from("devices")
+        .update({ can_delete_items: newStatus })
+        .eq("session_code", code)
+        .eq("device_id", deviceId)
+        .select();
+      if (error) throw error;
+
+      setRefreshTrigger((prev) => prev + 1);
+      try {
+        triggerGlobalRefresh();
+      } catch {}
+    } catch (e: any) {
+      setError(e?.message || "Failed to update delete permissions.");
+    } finally {
+      setLoading((prev) => ({ ...prev, [`delete-${deviceId}`]: false }));
+    }
+  };
+
   const leaveSession = async (deviceId: string, isHostDevice?: boolean) => {
     if (!supabase) return;
 
@@ -678,8 +715,8 @@ export default function DevicesPanel({ code }: { code: string }) {
                       {loading[`freeze-${d.device_id}`]
                         ? "..."
                         : d.is_frozen
-                        ? "Unfreeze"
-                        : "Freeze"}
+                          ? "Unfreeze"
+                          : "Freeze"}
                     </Button>
                     <Button
                       size="sm"
@@ -693,8 +730,8 @@ export default function DevicesPanel({ code }: { code: string }) {
                       {loading[`view-${d.device_id}`]
                         ? "..."
                         : d.can_view === false
-                        ? "Show"
-                        : "Hide"}
+                          ? "Show"
+                          : "Hide"}
                     </Button>
                     <Button
                       size="sm"
@@ -713,8 +750,33 @@ export default function DevicesPanel({ code }: { code: string }) {
                       {loading[`export-${d.device_id}`]
                         ? "..."
                         : d.can_export === false
-                        ? "Allow Export"
-                        : "Block Export"}
+                          ? "Allow Export"
+                          : "Block Export"}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant={
+                        d.can_delete_items === false ? "default" : "outline"
+                      }
+                      onClick={() =>
+                        toggleDeleteItems(
+                          d.device_id,
+                          d.can_delete_items !== false
+                        )
+                      }
+                      disabled={loading[`delete-${d.device_id}`]}
+                      className="text-xs px-2 py-1"
+                      title={
+                        d.can_delete_items === false
+                          ? "Allow deleting items"
+                          : "Block deleting items"
+                      }
+                    >
+                      {loading[`delete-${d.device_id}`]
+                        ? "..."
+                        : d.can_delete_items === false
+                          ? "Allow Delete"
+                          : "Block Delete"}
                     </Button>
                     <Button
                       size="sm"
@@ -724,6 +786,26 @@ export default function DevicesPanel({ code }: { code: string }) {
                       className="text-xs px-2 py-1"
                     >
                       {loading[d.device_id] ? "..." : "Remove"}
+                    </Button>
+                  </div>
+                )}
+
+                {/* Leave Session button for current user */}
+                {d.device_id === selfId && (
+                  <div className="flex items-center gap-1 sm:gap-2 flex-wrap justify-end sm:justify-start mt-2 pt-2 sm:mt-3 sm:pt-3 border-t">
+                    <Button
+                      size="sm"
+                      variant="destructive"
+                      onClick={() =>
+                        leaveSession(d.device_id, d.is_host || false)
+                      }
+                      disabled={loading[`leave-${d.device_id}`]}
+                      className="text-xs px-2 py-1 gap-1"
+                    >
+                      <LogOut className="h-3 w-3" />
+                      {loading[`leave-${d.device_id}`]
+                        ? "Leaving..."
+                        : "Leave Session"}
                     </Button>
                   </div>
                 )}

@@ -54,38 +54,34 @@ export default function SessionPage({ params }: Props) {
   }
 
   return (
-    <main className="flex flex-col h-screen w-full bg-background overflow-hidden">
+    <main className="relative flex flex-col h-screen w-full bg-background overflow-hidden">
+      {/* Subtle Grid Background Only */}
+      <div className="absolute inset-0 pointer-events-none overflow-hidden z-0 opacity-30">
+        <div className="absolute inset-0 bg-[linear-gradient(to_right,#80808008_1px,transparent_1px),linear-gradient(to_bottom,#80808008_1px,transparent_1px)] bg-[size:4rem_4rem]"></div>
+      </div>
+
       {/* Compact Header */}
-      <div className="flex-none px-3 sm:px-4 py-2 sm:py-3 border-b bg-card/50 backdrop-blur-sm">
+      <div className="relative z-10 flex-none px-3 sm:px-4 py-2 sm:py-3 border-b bg-card/50 backdrop-blur-sm">
         <div className="mx-auto w-full">
           <SessionHeader code={code} />
         </div>
       </div>
 
-      {/* Main content area - FLIPPED LAYOUT */}
-      <div className="flex-1 flex flex-col overflow-hidden">
-        {/* History section - NOW ON TOP (takes up remaining space) */}
-        <section className="flex-1 overflow-hidden flex flex-col min-h-0">
-          <div className="flex-1 overflow-auto min-h-0">
-            <Suspense
-              fallback={
-                <div className="p-3 sm:p-4 text-xs sm:text-sm text-muted-foreground animate-pulse">
-                  Loading history…
-                </div>
-              }
-            >
-              <ItemsList code={code} />
-            </Suspense>
-          </div>
-        </section>
+      {/* History section - Takes full height with bottom padding for fixed input */}
+      <section className="relative z-10 flex-1 overflow-auto pb-20">
+        <Suspense
+          fallback={
+            <div className="p-4 text-sm text-muted-foreground animate-pulse">
+              Loading history…
+            </div>
+          }
+        >
+          <ItemsList code={code} />
+        </Suspense>
+      </section>
 
-        {/* Input section - NOW AT BOTTOM (sticky, WhatsApp-style) */}
-        <section className="flex-none border-t bg-card shadow-lg">
-          <div className="px-2 sm:px-4 py-1.5 sm:py-3">
-            <ClipboardInput code={code} />
-          </div>
-        </section>
-      </div>
+      {/* Input section - Fixed at bottom (handled by ClipboardInput component) */}
+      <ClipboardInput code={code} />
     </main>
   );
 }
