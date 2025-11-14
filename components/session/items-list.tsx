@@ -340,8 +340,12 @@ export default function ItemsList({ code }: { code: string }) {
     }
   };
 
-  // Manual refresh function
+  // Manual refresh function - only works when auto-refresh is enabled
   const handleManualRefresh = () => {
+    if (!autoRefreshEnabled) {
+      // Auto-refresh is paused, don't allow manual refresh
+      return;
+    }
     fetchAndDecryptItems(true);
   };
 

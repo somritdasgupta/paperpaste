@@ -29,7 +29,9 @@ export async function POST(request: Request) {
       .eq("code", sessionCode)
       .single();
 
-    if (!session?.export_enabled) {
+    // Default to true if export_enabled is null/undefined (backward compatibility)
+    // Only block if explicitly set to false
+    if (session?.export_enabled === false) {
       return NextResponse.json(
         { error: "Export is disabled for this session" },
         { status: 403 }
