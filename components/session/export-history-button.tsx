@@ -41,7 +41,12 @@ export default function ExportHistoryButton({
       });
 
       if (!response.ok) {
-        throw new Error("Export failed");
+        const errorData = await response
+          .json()
+          .catch(() => ({ error: "Export failed" }));
+        throw new Error(
+          errorData.error || `Export failed with status ${response.status}`
+        );
       }
 
       // Get the blob and trigger download
@@ -54,12 +59,12 @@ export default function ExportHistoryButton({
       a.click();
       window.URL.revokeObjectURL(url);
       document.body.removeChild(a);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Export error:", error);
       setErrorDialog({
         open: true,
         title: "Export Failed",
-        message: "Failed to export history. Please try again.",
+        message: error.message || "Failed to export history. Please try again.",
       });
     } finally {
       setExporting(false);

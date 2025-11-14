@@ -222,6 +222,7 @@ export default function SessionHeader({ code }: { code: string }) {
     message: string;
   }>({ open: false, title: "", message: "" });
   const supabase = getSupabaseBrowserWithCode(code);
+  const sessionChannelRef = useRef<any>(null);
 
   useEffect(() => {
     const prefersDark =
@@ -258,6 +259,44 @@ export default function SessionHeader({ code }: { code: string }) {
         });
     }
   }, [code, supabase]);
+
+  // Realtime subscription for session settings changes
+  useEffect(() => {
+    if (!supabase) return;
+
+    const channel = supabase
+      .channel(`sessions-${code}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "sessions",
+          filter: `code=eq.${code}`,
+        },
+        (payload) => {
+          if (payload.new) {
+            setExportEnabled(payload.new.export_enabled !== false);
+            setDeletionEnabled(payload.new.allow_item_deletion !== false);
+          }
+        }
+      )
+      .on("broadcast", { event: "export_toggle" }, (payload) => {
+        setExportEnabled(payload.payload.export_enabled !== false);
+      })
+      .on("broadcast", { event: "deletion_toggle" }, (payload) => {
+        setDeletionEnabled(payload.payload.allow_item_deletion !== false);
+      })
+      .subscribe();
+
+    // Store channel reference for broadcasting
+    sessionChannelRef.current = channel;
+
+    return () => {
+      sessionChannelRef.current = null;
+      supabase.removeChannel(channel);
+    };
+  }, [supabase, code]);
 
   // Auto-hide mobile code after 5 seconds
   useEffect(() => {
@@ -365,6 +404,15 @@ export default function SessionHeader({ code }: { code: string }) {
 
       if (error) throw error;
       setExportEnabled(newStatus);
+
+      // Broadcast instant update to all clients
+      if (sessionChannelRef.current) {
+        await sessionChannelRef.current.send({
+          type: "broadcast",
+          event: "export_toggle",
+          payload: { export_enabled: newStatus },
+        });
+      }
     } catch (e: any) {
       console.error("Toggle export error:", e);
       setErrorDialog({
@@ -400,6 +448,15 @@ export default function SessionHeader({ code }: { code: string }) {
         throw error;
       }
       setDeletionEnabled(newStatus);
+
+      // Broadcast instant update to all clients
+      if (sessionChannelRef.current) {
+        await sessionChannelRef.current.send({
+          type: "broadcast",
+          event: "deletion_toggle",
+          payload: { allow_item_deletion: newStatus },
+        });
+      }
     } catch (e: any) {
       console.error("Toggle deletion error:", e);
       setErrorDialog({
@@ -860,8 +917,8 @@ export default function SessionHeader({ code }: { code: string }) {
               {leaveLoading
                 ? "Leaving..."
                 : deleteMyData
-                ? "Leave & Delete Data"
-                : "Leave Session"}
+                  ? "Leave & Delete Data"
+                  : "Leave Session"}
             </Button>
           </DialogFooter>
         </DialogContent>
