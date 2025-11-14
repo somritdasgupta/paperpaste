@@ -79,8 +79,44 @@ export default function HomePage() {
   };
 
   return (
-    <main className="bg-gradient-to-br from-background via-background to-muted/30">
-      <section className="w-full px-4 sm:px-6 lg:px-16 xl:px-24 pt-12 sm:pt-16 pb-8">
+    <main className="relative min-h-screen bg-gradient-to-br from-background via-background to-muted/30 overflow-hidden">
+      {/* Background Graphics */}
+      <div className="absolute inset-0 pointer-events-none overflow-hidden">
+        {/* Gradient orbs */}
+        <div className="absolute top-20 left-10 w-72 h-72 bg-primary/5 rounded-full blur-3xl animate-pulse"></div>
+        <div
+          className="absolute bottom-20 right-10 w-96 h-96 bg-primary/10 rounded-full blur-3xl animate-pulse"
+          style={{ animationDelay: "1s" }}
+        ></div>
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] bg-primary/5 rounded-full blur-3xl"></div>
+
+        {/* Grid pattern */}
+        <div className="absolute inset-0 bg-[linear-gradient(to_right,#80808012_1px,transparent_1px),linear-gradient(to_bottom,#80808012_1px,transparent_1px)] bg-[size:4rem_4rem]"></div>
+
+        {/* Abstract shapes */}
+        <svg
+          className="absolute top-10 right-20 w-32 h-32 text-primary/10 animate-spin-slow"
+          style={{ animationDuration: "30s" }}
+          viewBox="0 0 200 200"
+        >
+          <path fill="currentColor" d="M100,20 L180,180 L20,180 Z" />
+        </svg>
+        <svg
+          className="absolute bottom-20 left-20 w-24 h-24 text-primary/10"
+          viewBox="0 0 100 100"
+        >
+          <rect width="100" height="100" rx="20" fill="currentColor" />
+        </svg>
+        <svg
+          className="absolute top-1/3 right-1/4 w-16 h-16 text-primary/10 animate-bounce"
+          style={{ animationDuration: "3s" }}
+          viewBox="0 0 100 100"
+        >
+          <circle cx="50" cy="50" r="50" fill="currentColor" />
+        </svg>
+      </div>
+
+      <section className="relative w-full px-4 sm:px-6 lg:px-16 xl:px-24 pt-12 sm:pt-16 pb-8">
         <div className="w-full text-center">
           <div className="inline-flex items-center gap-3 mb-4">
             <div className="p-2 rounded bg-primary/10 border border-primary/20">
@@ -96,7 +132,7 @@ export default function HomePage() {
         </div>
       </section>
 
-      <section className="w-full px-4 sm:px-6 lg:px-8 py-4 sm:py-6 pb-8">
+      <section className="relative w-full px-4 sm:px-6 lg:px-8 py-4 sm:py-6 pb-8">
         <div className="w-full mx-auto">
           <EnvBanner />
           <div className="grid lg:grid-cols-1 gap-8">

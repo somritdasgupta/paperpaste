@@ -20,6 +20,8 @@ import {
 import { getSupabaseBrowserWithCode } from "@/lib/supabase/client";
 import { getOrCreateDeviceId } from "@/lib/device";
 import { generateSessionKey, decryptDeviceName } from "@/lib/encryption";
+import { subscribeToGlobalRefresh } from "@/lib/globalRefresh";
+import { triggerGlobalRefresh } from "@/lib/globalRefresh";
 import {
   Smartphone,
   Laptop,
@@ -43,6 +45,7 @@ import {
   Copy,
   Check,
 } from "lucide-react";
+import MaskedOverlay from "@/components/ui/masked-overlay";
 
 type Device = {
   id: string;
@@ -55,6 +58,8 @@ type Device = {
   created_at: string;
   is_frozen?: boolean;
   can_view?: boolean;
+  can_export?: boolean;
+  can_delete_items?: boolean;
 };
 
 export default function DevicesPanel({ code }: { code: string }) {
@@ -70,7 +75,6 @@ export default function DevicesPanel({ code }: { code: string }) {
     new Set()
   );
   const [refreshTrigger, setRefreshTrigger] = useState(0);
-  const [autoRefreshInterval] = useState(3000); // 3 seconds default
   const [isHost, setIsHost] = useState(false);
   const [redirectCountdown, setRedirectCountdown] = useState<number | null>(
     null
@@ -199,10 +203,10 @@ export default function DevicesPanel({ code }: { code: string }) {
 
     fetchDevices();
 
-    // Auto-refresh interval
-    const autoRefreshIntervalId = setInterval(() => {
+    // Subscribe to global refresh events instead of using a local interval.
+    const unsubscribeRefresh = subscribeToGlobalRefresh(() => {
       fetchDevices();
-    }, autoRefreshInterval);
+    });
 
     // setup real-time with better error handling
     const channel = supabase
@@ -281,12 +285,12 @@ export default function DevicesPanel({ code }: { code: string }) {
     return () => {
       cancelled = true;
       if (heartbeatInterval) clearInterval(heartbeatInterval);
-      if (autoRefreshIntervalId) clearInterval(autoRefreshIntervalId);
+      if (unsubscribeRefresh) unsubscribeRefresh();
       supabase.removeChannel(channel);
       supabase.removeChannel(killChannel);
       supabase.removeChannel(deviceChannel);
     };
-  }, [supabase, code, sessionKey, refreshTrigger, autoRefreshInterval]);
+  }, [supabase, code, sessionKey, refreshTrigger, selfId]);
 
   const kick = async (deviceId: string) => {
     if (!supabase) return;
@@ -314,21 +318,30 @@ export default function DevicesPanel({ code }: { code: string }) {
 
   const toggleFreeze = async (deviceId: string, currentStatus: boolean) => {
     if (!supabase) return;
-    console.log(
-      `Toggling freeze for device ${deviceId}: ${currentStatus} -> ${!currentStatus}`
-    );
     setLoading((prev) => ({ ...prev, [`freeze-${deviceId}`]: true }));
     try {
+      const newStatus = !currentStatus;
+
+      // First broadcast the change for instant UI update
+      await supabase.channel(`view-permissions-${code}`).send({
+        type: "broadcast",
+        event: "permission_changed",
+        payload: { device_id: deviceId, is_frozen: newStatus, can_view: true },
+      });
+
+      // Then update database
       const { data, error } = await supabase
         .from("devices")
-        .update({ is_frozen: !currentStatus })
+        .update({ is_frozen: newStatus })
         .eq("session_code", code)
         .eq("device_id", deviceId)
         .select();
       if (error) throw error;
-      console.log("Freeze toggle result:", data);
-      // Trigger component refresh
+
       setRefreshTrigger((prev) => prev + 1);
+      try {
+        triggerGlobalRefresh();
+      } catch {}
     } catch (e: any) {
       setError(e?.message || "Failed to update device status.");
     } finally {
@@ -338,25 +351,103 @@ export default function DevicesPanel({ code }: { code: string }) {
 
   const toggleView = async (deviceId: string, currentStatus: boolean) => {
     if (!supabase) return;
-    console.log(
-      `Toggling view for device ${deviceId}: ${currentStatus} -> ${!currentStatus}`
-    );
     setLoading((prev) => ({ ...prev, [`view-${deviceId}`]: true }));
     try {
+      const newStatus = !currentStatus;
+
+      // First broadcast the change for instant UI update
+      await supabase.channel(`view-permissions-${code}`).send({
+        type: "broadcast",
+        event: "permission_changed",
+        payload: { device_id: deviceId, can_view: newStatus, is_frozen: false },
+      });
+
+      // Then update database
       const { data, error } = await supabase
         .from("devices")
-        .update({ can_view: !currentStatus })
+        .update({ can_view: newStatus })
         .eq("session_code", code)
         .eq("device_id", deviceId)
         .select();
       if (error) throw error;
-      console.log("View toggle result:", data);
-      // Trigger component refresh
+
       setRefreshTrigger((prev) => prev + 1);
+      try {
+        triggerGlobalRefresh();
+      } catch {}
     } catch (e: any) {
       setError(e?.message || "Failed to update device permissions.");
     } finally {
       setLoading((prev) => ({ ...prev, [`view-${deviceId}`]: false }));
+    }
+  };
+
+  const toggleExport = async (deviceId: string, currentStatus: boolean) => {
+    if (!supabase) return;
+    setLoading((prev) => ({ ...prev, [`export-${deviceId}`]: true }));
+    try {
+      const newStatus = !currentStatus;
+
+      // First broadcast the change for instant UI update
+      await supabase.channel(`view-permissions-${code}`).send({
+        type: "broadcast",
+        event: "permission_changed",
+        payload: { device_id: deviceId, can_export: newStatus },
+      });
+
+      // Then update database
+      const { data, error } = await supabase
+        .from("devices")
+        .update({ can_export: newStatus })
+        .eq("session_code", code)
+        .eq("device_id", deviceId)
+        .select();
+      if (error) throw error;
+
+      setRefreshTrigger((prev) => prev + 1);
+      try {
+        triggerGlobalRefresh();
+      } catch {}
+    } catch (e: any) {
+      setError(e?.message || "Failed to update export permissions.");
+    } finally {
+      setLoading((prev) => ({ ...prev, [`export-${deviceId}`]: false }));
+    }
+  };
+
+  const toggleDeleteItems = async (
+    deviceId: string,
+    currentStatus: boolean
+  ) => {
+    if (!supabase) return;
+    setLoading((prev) => ({ ...prev, [`delete-${deviceId}`]: true }));
+    try {
+      const newStatus = !currentStatus;
+
+      // First broadcast the change for instant UI update
+      await supabase.channel(`view-permissions-${code}`).send({
+        type: "broadcast",
+        event: "permission_changed",
+        payload: { device_id: deviceId, can_delete_items: newStatus },
+      });
+
+      // Then update database
+      const { data, error } = await supabase
+        .from("devices")
+        .update({ can_delete_items: newStatus })
+        .eq("session_code", code)
+        .eq("device_id", deviceId)
+        .select();
+      if (error) throw error;
+
+      setRefreshTrigger((prev) => prev + 1);
+      try {
+        triggerGlobalRefresh();
+      } catch {}
+    } catch (e: any) {
+      setError(e?.message || "Failed to update delete permissions.");
+    } finally {
+      setLoading((prev) => ({ ...prev, [`delete-${deviceId}`]: false }));
     }
   };
 
@@ -431,7 +522,31 @@ export default function DevicesPanel({ code }: { code: string }) {
   if (!supabase) return null;
 
   return (
-    <div>
+    <div className="relative">
+      {/* Determine local device state and show global overlay/badge when
+          current device is frozen or hidden. This keeps UI consistent with
+          other components (dim + badge). */}
+      {(() => {
+        const local = devices.find((dd) => dd.device_id === selfId);
+        // Only show the full-panel overlay when the local device is hidden (can_view === false).
+        // If the device is frozen, we keep per-device frozen badges but do not block the devices panel UI.
+        if (local && local.can_view === false) {
+          return (
+            <>
+              <div className="absolute left-4 top-4 z-50">
+                <div
+                  className={`text-xs px-2 py-1 rounded-full font-medium flex items-center gap-2 bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300`}
+                >
+                  <EyeOff className="h-3 w-3" />
+                  <span>View hidden</span>
+                </div>
+              </div>
+              <MaskedOverlay variant="hidden" />
+            </>
+          );
+        }
+        return null;
+      })()}
       {redirectCountdown !== null && (
         <div className="mb-3 text-sm text-destructive bg-destructive/10 border border-destructive/20 rounded-md p-3 text-center">
           <div className="font-medium">{redirectReason}</div>
@@ -600,8 +715,8 @@ export default function DevicesPanel({ code }: { code: string }) {
                       {loading[`freeze-${d.device_id}`]
                         ? "..."
                         : d.is_frozen
-                        ? "Unfreeze"
-                        : "Freeze"}
+                          ? "Unfreeze"
+                          : "Freeze"}
                     </Button>
                     <Button
                       size="sm"
@@ -615,8 +730,53 @@ export default function DevicesPanel({ code }: { code: string }) {
                       {loading[`view-${d.device_id}`]
                         ? "..."
                         : d.can_view === false
-                        ? "Show"
-                        : "Hide"}
+                          ? "Show"
+                          : "Hide"}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant={d.can_export === false ? "default" : "outline"}
+                      onClick={() =>
+                        toggleExport(d.device_id, d.can_export !== false)
+                      }
+                      disabled={loading[`export-${d.device_id}`]}
+                      className="text-xs px-2 py-1"
+                      title={
+                        d.can_export === false
+                          ? "Allow exporting history"
+                          : "Block exporting history"
+                      }
+                    >
+                      {loading[`export-${d.device_id}`]
+                        ? "..."
+                        : d.can_export === false
+                          ? "Allow Export"
+                          : "Block Export"}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant={
+                        d.can_delete_items === false ? "default" : "outline"
+                      }
+                      onClick={() =>
+                        toggleDeleteItems(
+                          d.device_id,
+                          d.can_delete_items !== false
+                        )
+                      }
+                      disabled={loading[`delete-${d.device_id}`]}
+                      className="text-xs px-2 py-1"
+                      title={
+                        d.can_delete_items === false
+                          ? "Allow deleting items"
+                          : "Block deleting items"
+                      }
+                    >
+                      {loading[`delete-${d.device_id}`]
+                        ? "..."
+                        : d.can_delete_items === false
+                          ? "Allow Delete"
+                          : "Block Delete"}
                     </Button>
                     <Button
                       size="sm"
@@ -626,6 +786,26 @@ export default function DevicesPanel({ code }: { code: string }) {
                       className="text-xs px-2 py-1"
                     >
                       {loading[d.device_id] ? "..." : "Remove"}
+                    </Button>
+                  </div>
+                )}
+
+                {/* Leave Session button for current user */}
+                {d.device_id === selfId && (
+                  <div className="flex items-center gap-1 sm:gap-2 flex-wrap justify-end sm:justify-start mt-2 pt-2 sm:mt-3 sm:pt-3 border-t">
+                    <Button
+                      size="sm"
+                      variant="destructive"
+                      onClick={() =>
+                        leaveSession(d.device_id, d.is_host || false)
+                      }
+                      disabled={loading[`leave-${d.device_id}`]}
+                      className="text-xs px-2 py-1 gap-1"
+                    >
+                      <LogOut className="h-3 w-3" />
+                      {loading[`leave-${d.device_id}`]
+                        ? "Leaving..."
+                        : "Leave Session"}
                     </Button>
                   </div>
                 )}

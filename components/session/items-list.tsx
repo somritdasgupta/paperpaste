@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -14,7 +14,10 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { getSupabaseBrowserWithCode } from "@/lib/supabase/client";
+import { subscribeToGlobalRefresh } from "@/lib/globalRefresh";
+import { triggerGlobalRefresh } from "@/lib/globalRefresh";
 import { getOrCreateDeviceId } from "@/lib/device";
+import { ErrorDialog } from "@/components/ui/error-dialog";
 import {
   generateSessionKey,
   decryptData,
@@ -41,10 +44,16 @@ import {
   Calendar,
   User,
   FileIcon,
+  EyeOff,
+  Timer,
+  Trash2,
 } from "lucide-react";
+import MaskedOverlay from "@/components/ui/masked-overlay";
 import FilePreview from "./file-preview";
 import { marked } from "marked";
 import DOMPurify from "dompurify";
+import LeavingCountdown from "./leaving-countdown";
+import ExportHistoryButton from "./export-history-button";
 
 type Item = {
   id: string;
@@ -85,6 +94,12 @@ export default function ItemsList({ code }: { code: string }) {
   const supabase = getSupabaseBrowserWithCode(code);
   const [items, setItems] = useState<Item[]>([]);
   const [canView, setCanView] = useState(true);
+  const [isFrozen, setIsFrozen] = useState(false);
+  const [canExport, setCanExport] = useState(true);
+  const [exportEnabled, setExportEnabled] = useState(true);
+  const [canDeleteItems, setCanDeleteItems] = useState(true);
+  const [allowItemDeletion, setAllowItemDeletion] = useState(true);
+  const [isHost, setIsHost] = useState(false);
   const [sessionKey, setSessionKey] = useState<CryptoKey | null>(null);
   const [expandedItems, setExpandedItems] = useState<Set<string>>(new Set());
   const [devices, setDevices] = useState<Map<string, DeviceInfo>>(new Map());
@@ -96,12 +111,31 @@ export default function ItemsList({ code }: { code: string }) {
   const [copiedItems, setCopiedItems] = useState<Set<string>>(new Set());
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [autoRefreshEnabled, setAutoRefreshEnabled] = useState(true);
-  const [autoRefreshInterval, setAutoRefreshInterval] = useState(3000); // 3 seconds default
+  const [autoRefreshInterval, setAutoRefreshInterval] = useState(5000); // 5 seconds default
 
   // Session dialog states
   const [sessionExpiredOpen, setSessionExpiredOpen] = useState(false);
   const [sessionKilledOpen, setSessionKilledOpen] = useState(false);
   const [killCountdown, setKillCountdown] = useState(5);
+
+  // Leaving state
+  const [isLeaving, setIsLeaving] = useState(false);
+  const [leaveReason, setLeaveReason] = useState<
+    "kicked" | "left" | "host-left"
+  >("kicked");
+
+  // Error dialog state
+  const [errorDialog, setErrorDialog] = useState<{
+    open: boolean;
+    title: string;
+    message: string;
+  }>({ open: false, title: "", message: "" });
+
+  // Delete confirmation dialog state
+  const [deleteConfirm, setDeleteConfirm] = useState<{
+    open: boolean;
+    itemId: string | null;
+  }>({ open: false, itemId: null });
 
   // Initialize device ID on client side
   useEffect(() => {
@@ -127,6 +161,20 @@ export default function ItemsList({ code }: { code: string }) {
         .from("devices")
         .select("device_id, device_name_encrypted")
         .eq("session_code", code);
+
+      // Check if current device still exists in the session
+      const currentDeviceExists = devicesData?.some(
+        (d) => d.device_id === deviceId
+      );
+
+      if (!currentDeviceExists) {
+        // Device has been removed/kicked - trigger immediate redirect
+        localStorage.removeItem(`pp-host-${code}`);
+        localStorage.removeItem(`pp-joined-${code}`);
+        setLeaveReason("kicked");
+        setIsLeaving(true);
+        return;
+      }
 
       // Build device name map with decryption
       const deviceMap = new Map<string, DeviceInfo>();
@@ -292,8 +340,12 @@ export default function ItemsList({ code }: { code: string }) {
     }
   };
 
-  // Manual refresh function
+  // Manual refresh function - only works when auto-refresh is enabled
   const handleManualRefresh = () => {
+    if (!autoRefreshEnabled) {
+      // Auto-refresh is paused, don't allow manual refresh
+      return;
+    }
     fetchAndDecryptItems(true);
   };
 
@@ -346,26 +398,58 @@ export default function ItemsList({ code }: { code: string }) {
     };
   }, []);
 
-  // Check view permissions
+  // Check view permissions with realtime enforcement
   useEffect(() => {
-    if (!supabase) return;
+    if (!supabase || !deviceId) return;
 
     const checkViewPermission = async () => {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from("devices")
-        .select("can_view")
+        .select("can_view, is_frozen, can_export, can_delete_items, is_host")
         .eq("session_code", code)
         .eq("device_id", deviceId)
         .single();
 
       if (data) {
         setCanView(data.can_view !== false);
+        setIsFrozen(data.is_frozen === true);
+        setCanExport(data.can_export !== false);
+        // Default to true if column doesn't exist yet
+        setCanDeleteItems(data.can_delete_items !== false);
+        setIsHost(data.is_host === true);
+      } else if (error) {
+        // If column doesn't exist, default to true (allow deletion)
+        console.warn(
+          "Could not fetch device permissions, using defaults:",
+          error
+        );
+        setCanDeleteItems(true);
+      }
+
+      // Fetch session settings
+      const { data: sessionData, error: sessionError } = await supabase
+        .from("sessions")
+        .select("export_enabled, allow_item_deletion")
+        .eq("code", code)
+        .single();
+
+      if (sessionData) {
+        setExportEnabled(sessionData.export_enabled !== false);
+        // Default to true if column doesn't exist yet
+        setAllowItemDeletion(sessionData.allow_item_deletion !== false);
+      } else if (sessionError) {
+        // If column doesn't exist, default to true (allow deletion)
+        console.warn(
+          "Could not fetch session settings, using defaults:",
+          sessionError
+        );
+        setAllowItemDeletion(true);
       }
     };
 
     checkViewPermission();
 
-    // Subscribe to view permission changes - listen to all devices in session
+    // Subscribe to view permission changes with broadcast for instant updates
     const viewChannel = supabase
       .channel(`view-permissions-${code}`)
       .on(
@@ -377,16 +461,72 @@ export default function ItemsList({ code }: { code: string }) {
           filter: `session_code=eq.${code}`,
         },
         (payload) => {
-          console.log("Device permission change detected:", payload);
-          // Check if this change affects our device
           if (payload.new && payload.new.device_id === deviceId) {
-            console.log("Permission change for our device:", payload.new);
             setCanView(payload.new.can_view !== false);
-            // Also trigger a data refresh to get updated device names
+            setIsFrozen(payload.new.is_frozen === true);
+            setCanExport(payload.new.can_export !== false);
+            setCanDeleteItems(payload.new.can_delete_items !== false);
+            setIsHost(payload.new.is_host === true);
             fetchAndDecryptItems();
+            try {
+              triggerGlobalRefresh();
+            } catch {}
           }
         }
       )
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "sessions",
+          filter: `code=eq.${code}`,
+        },
+        (payload) => {
+          if (payload.new) {
+            setExportEnabled(payload.new.export_enabled !== false);
+            setAllowItemDeletion(payload.new.allow_item_deletion !== false);
+            try {
+              triggerGlobalRefresh();
+            } catch {}
+          }
+        }
+      )
+      // Listen for instant export toggle broadcast
+      .on("broadcast", { event: "export_toggle" }, (payload) => {
+        setExportEnabled(payload.payload.export_enabled !== false);
+        try {
+          triggerGlobalRefresh();
+        } catch {}
+      })
+      .on("broadcast", { event: "deletion_toggle" }, (payload) => {
+        setAllowItemDeletion(payload.payload.allow_item_deletion !== false);
+        try {
+          triggerGlobalRefresh();
+        } catch {}
+      })
+      // Listen for realtime broadcast events for instant permission changes
+      .on("broadcast", { event: "permission_changed" }, (payload) => {
+        if (payload.payload.device_id === deviceId) {
+          setCanView(payload.payload.can_view !== false);
+          setIsFrozen(payload.payload.is_frozen === true);
+          setCanDeleteItems(payload.payload.can_delete_items !== false);
+          setCanExport(payload.payload.can_export !== false);
+          // Trigger global refresh instead of immediately fetching
+          // This respects the auto-refresh timer
+          try {
+            triggerGlobalRefresh();
+          } catch {}
+        }
+      })
+      .on("broadcast", { event: "device_kicked" }, (payload) => {
+        if (payload.payload.device_id === deviceId) {
+          localStorage.removeItem(`pp-host-${code}`);
+          localStorage.removeItem(`pp-joined-${code}`);
+          setLeaveReason("kicked");
+          setIsLeaving(true);
+        }
+      })
       .subscribe();
 
     return () => {
@@ -397,7 +537,6 @@ export default function ItemsList({ code }: { code: string }) {
   useEffect(() => {
     if (!supabase || !sessionKey) return;
     let active = true;
-
     // Initial data fetch
     fetchAndDecryptItems();
 
@@ -447,7 +586,7 @@ export default function ItemsList({ code }: { code: string }) {
     const itemsChannel = supabase
       .channel(`items-realtime-${code}`, {
         config: {
-          broadcast: { self: false },
+          broadcast: { self: true },
           presence: { key: code },
         },
       })
@@ -534,17 +673,22 @@ export default function ItemsList({ code }: { code: string }) {
               file_download_url: fileDownloadUrl,
             };
 
-            setItems((prev) => [decryptedItem, ...prev]);
+            // Trigger global refresh instead of immediately updating
+            // This respects the auto-refresh timer
+            try {
+              triggerGlobalRefresh();
+            } catch {}
           } else {
             // For updates and deletes, refetch all to maintain consistency
-            if (active) fetchAndDecryptItems();
+            try {
+              triggerGlobalRefresh();
+            } catch {}
           }
         }
       )
       .subscribe((status) => {
         console.log("Items subscription status:", status);
       });
-
     const sessionChannel = supabase
       .channel(`sessions-${code}`)
       .on(
@@ -583,22 +727,27 @@ export default function ItemsList({ code }: { code: string }) {
       })
       .subscribe();
 
-    // Add periodic refresh to ensure we don't miss anything
-    const refreshInterval = setInterval(() => {
-      if (active && autoRefreshEnabled) {
-        fetchAndDecryptItems();
-      }
-    }, autoRefreshInterval);
+    // Subscribe to global refresh events instead of using a local timer.
+    const unsubscribe = subscribeToGlobalRefresh(() => {
+      if (active && autoRefreshRef.current) fetchAndDecryptItems();
+    });
 
     return () => {
       active = false;
-      clearInterval(refreshInterval);
+      unsubscribe();
       supabase.removeChannel(itemsChannel);
       supabase.removeChannel(devicesChannel);
       supabase.removeChannel(sessionChannel);
       supabase.removeChannel(sessionKillChannel);
     };
-  }, [supabase, code, sessionKey, autoRefreshEnabled, autoRefreshInterval]);
+  }, [supabase, code, sessionKey]);
+
+  // Separate useEffect to handle auto-refresh state changes without resubscribing to channels
+  const autoRefreshRef = useRef(autoRefreshEnabled);
+
+  useEffect(() => {
+    autoRefreshRef.current = autoRefreshEnabled;
+  }, [autoRefreshEnabled]);
 
   if (!supabase) {
     return (
@@ -638,16 +787,9 @@ export default function ItemsList({ code }: { code: string }) {
     );
   }
 
-  if (!canView) {
-    return (
-      <div className="flex items-center justify-center h-32 text-sm text-muted-foreground">
-        <div className="text-center">
-          <div className="text-2xl mb-2">�</div>
-          <div>You don't have permission to view shared items.</div>
-        </div>
-      </div>
-    );
-  }
+  // When view is revoked, keep rendering the UI but show a small badge and
+  // an interaction-blocking overlay so layout doesn't jump and the app
+  // appears smooth for other participants.
 
   const copyToClipboard = async (content: string, itemId?: string) => {
     try {
@@ -677,6 +819,46 @@ export default function ItemsList({ code }: { code: string }) {
       }
       return newSet;
     });
+  };
+
+  const deleteItem = async (itemId: string) => {
+    if (!supabase) {
+      console.warn("Delete not allowed - no supabase client");
+      return;
+    }
+
+    // Show confirmation dialog
+    setDeleteConfirm({ open: true, itemId });
+  };
+
+  const confirmDeleteItem = async () => {
+    const itemId = deleteConfirm.itemId;
+    if (!itemId || !supabase) return;
+
+    // Close confirmation dialog
+    setDeleteConfirm({ open: false, itemId: null });
+
+    try {
+      const { error } = await supabase.from("items").delete().eq("id", itemId);
+
+      if (error) throw error;
+
+      // Remove from local state immediately for instant feedback
+      setItems((prev) => prev.filter((item) => item.id !== itemId));
+
+      // Trigger refresh for other clients
+      try {
+        triggerGlobalRefresh();
+      } catch {}
+    } catch (err) {
+      console.error("Failed to delete item:", err);
+      setErrorDialog({
+        open: true,
+        title: "Delete Failed",
+        message: "Failed to delete item. Please try again.",
+      });
+      // Optionally show error toast/notification
+    }
   };
 
   const truncateContent = (content: string, maxLength: number = 200) => {
@@ -744,6 +926,14 @@ export default function ItemsList({ code }: { code: string }) {
     setAutoRefreshEnabled(!autoRefreshEnabled);
   };
 
+  // Cycle through time intervals: 3s -> 5s -> 10s -> 15s -> 30s -> 60s -> back to 3s
+  const cycleTimeInterval = () => {
+    const intervals = [3000, 5000, 10000, 15000, 30000, 60000];
+    const currentIndex = intervals.indexOf(autoRefreshInterval);
+    const nextIndex = (currentIndex + 1) % intervals.length;
+    setAutoRefreshInterval(intervals[nextIndex]);
+  };
+
   const formatFileSize = (bytes: number) => {
     if (bytes === 0) return "0 B";
     const k = 1024;
@@ -767,35 +957,38 @@ export default function ItemsList({ code }: { code: string }) {
 
   const getFileIcon = (mimeType?: string) => {
     if (!mimeType)
-      return <FileText className="h-5 w-5 text-muted-foreground" />;
+      return <FileText className="h-4 w-4 text-muted-foreground" />;
 
     if (mimeType.startsWith("image/")) {
-      return <Image className="h-5 w-5 text-blue-500" />;
+      return <Image className="h-4 w-4 text-blue-500" />;
     }
     if (mimeType.startsWith("video/")) {
-      return <Play className="h-5 w-5 text-purple-500" />;
+      return <Play className="h-4 w-4 text-purple-500" />;
     }
     if (mimeType.startsWith("audio/")) {
-      return <Play className="h-5 w-5 text-green-500" />;
+      return <Play className="h-4 w-4 text-green-500" />;
     }
     if (mimeType.includes("pdf")) {
-      return <FileText className="h-5 w-5 text-red-500" />;
+      return <FileText className="h-4 w-4 text-red-500" />;
     }
     if (
       mimeType.includes("code") ||
       mimeType.includes("javascript") ||
       mimeType.includes("json")
     ) {
-      return <Code className="h-5 w-5 text-yellow-500" />;
+      return <Code className="h-4 w-4 text-yellow-500" />;
     }
 
-    return <FileText className="h-5 w-5 text-muted-foreground" />;
+    return <FileText className="h-4 w-4 text-muted-foreground" />;
   };
 
   return (
-    <div className="w-full">
+    <div className="w-full h-full flex flex-col relative">
+      {/* Show overlay for hidden (full screen) or frozen (history only) */}
+      {!canView && <MaskedOverlay variant="hidden" />}
+
       {/* Clean minimal header */}
-      <div className="flex items-center justify-between p-4 border-b border-border/30">
+      <div className="flex items-center justify-between p-4 border-b border-border/30 flex-none">
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-2">
             <div
@@ -803,8 +996,8 @@ export default function ItemsList({ code }: { code: string }) {
                 connectionStatus === "connected"
                   ? `bg-green-500 ${isRefreshing ? "animate-pulse" : ""}`
                   : connectionStatus === "connecting"
-                  ? "bg-yellow-500 animate-pulse"
-                  : "bg-red-500"
+                    ? "bg-yellow-500 animate-pulse"
+                    : "bg-red-500"
               }`}
             />
             <span className="text-sm font-medium text-foreground">
@@ -815,20 +1008,31 @@ export default function ItemsList({ code }: { code: string }) {
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5 sm:gap-2">
+          {/* Export button - hidden on mobile to prevent clutter */}
+          {exportEnabled && canExport && items.length > 0 && (
+            <div className="hidden sm:block">
+              <ExportHistoryButton
+                sessionCode={code}
+                canExport={canExport}
+                isHost={isHost}
+              />
+            </div>
+          )}
+
           <Button
             size="sm"
             variant="ghost"
             onClick={toggleAutoRefresh}
-            className="h-8 w-8 p-0 hover:bg-muted/50"
+            className="h-8 w-8 p-0 hover:bg-muted/50 transition-colors"
             title={
               autoRefreshEnabled ? "Pause auto-refresh" : "Resume auto-refresh"
             }
           >
             {autoRefreshEnabled ? (
-              <Pause className="h-4 w-4" />
+              <Pause className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
             ) : (
-              <Play className="h-4 w-4" />
+              <Play className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
             )}
           </Button>
           <Button
@@ -836,229 +1040,311 @@ export default function ItemsList({ code }: { code: string }) {
             variant="ghost"
             onClick={handleManualRefresh}
             disabled={isRefreshing}
-            className="h-8 w-8 p-0 hover:bg-muted/50"
-            title="Refresh data"
+            className="h-8 w-8 p-0 hover:bg-muted/50 transition-colors"
+            title={`Refresh data${
+              autoRefreshEnabled ? " (Auto-refresh active)" : ""
+            }`}
           >
             <RefreshCw
-              className={`h-4 w-4 transition-all duration-200 ${
-                isRefreshing ? "animate-spin text-primary" : ""
+              className={`h-3.5 w-3.5 sm:h-4 sm:w-4 transition-all duration-200 ${
+                isRefreshing
+                  ? "animate-spin text-primary"
+                  : autoRefreshEnabled
+                    ? "text-primary"
+                    : ""
               }`}
             />
           </Button>
 
-          <select
-            value={autoRefreshInterval}
-            onChange={(e) => setAutoRefreshInterval(Number(e.target.value))}
-            className="text-xs bg-background border border-border/50 rounded-md px-2 py-1 text-foreground hover:bg-muted/50 focus:outline-none focus:ring-1 focus:ring-primary"
-            title="Auto-refresh interval"
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={cycleTimeInterval}
+            className="h-8 px-2 sm:px-2.5 text-xs font-medium hover:bg-muted/50 transition-all"
+            title="Click to cycle interval (3s → 5s → 10s → 15s → 30s → 60s)"
           >
-            <option value={3000}>3s</option>
-            <option value={5000}>5s</option>
-            <option value={10000}>10s</option>
-            <option value={15000}>15s</option>
-            <option value={30000}>30s</option>
-          </select>
+            <Timer className="h-3.5 w-3.5 mr-0.5 sm:mr-1" />
+            <span className="hidden xs:inline">
+              {autoRefreshInterval >= 1000
+                ? `${autoRefreshInterval / 1000}s`
+                : `${autoRefreshInterval}ms`}
+            </span>
+            <span className="xs:hidden">
+              {autoRefreshInterval >= 1000
+                ? `${autoRefreshInterval / 1000}`
+                : autoRefreshInterval}
+            </span>
+          </Button>
         </div>
       </div>
 
-      {items.length === 0 ? (
-        <div className="flex items-center justify-center h-48 text-muted-foreground">
-          <div className="text-center space-y-2">
-            <FileText className="h-12 w-12 mx-auto opacity-50" />
-            <div className="text-lg font-medium">No items shared yet</div>
-            <div className="text-sm">
-              Share text, code, or files to get started
+      {/* Scrollable items area with frozen overlay */}
+      <div className="flex-1 overflow-auto relative">
+        {/* Frozen overlay only for this section */}
+        {isFrozen && canView && <MaskedOverlay variant="frozen" />}
+
+        {items.length === 0 ? (
+          <div className="flex items-center justify-center h-64 text-muted-foreground">
+            <div className="text-center space-y-4">
+              {/* Animated empty state illustration */}
+              <div className="relative mx-auto w-32 h-32 mb-2">
+                <div className="absolute inset-0 bg-primary/5 rounded-2xl animate-pulse"></div>
+                <div className="absolute inset-2 bg-primary/10 rounded-xl"></div>
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <svg
+                    className="w-16 h-16 text-primary/30"
+                    viewBox="0 0 100 100"
+                    fill="none"
+                  >
+                    <rect
+                      x="20"
+                      y="30"
+                      width="60"
+                      height="8"
+                      rx="4"
+                      fill="currentColor"
+                      opacity="0.6"
+                    />
+                    <rect
+                      x="20"
+                      y="46"
+                      width="40"
+                      height="8"
+                      rx="4"
+                      fill="currentColor"
+                      opacity="0.4"
+                    />
+                    <rect
+                      x="20"
+                      y="62"
+                      width="50"
+                      height="8"
+                      rx="4"
+                      fill="currentColor"
+                      opacity="0.5"
+                    />
+                    <circle
+                      cx="75"
+                      cy="25"
+                      r="3"
+                      fill="currentColor"
+                      className="animate-ping"
+                      style={{ animationDuration: "2s" }}
+                    />
+                  </svg>
+                </div>
+              </div>
             </div>
           </div>
-        </div>
-      ) : (
-        <div className="relative space-y-2 sm:space-y-3 p-3 sm:p-4">
-          {/* Beautiful shimmer overlay during refresh */}
-          {isRefreshing && (
-            <div className="absolute inset-0 z-10 bg-gradient-to-r from-transparent via-white/20 to-transparent dark:via-white/10 animate-shimmer pointer-events-none rounded-lg">
-              <div className="h-full w-full bg-gradient-to-r from-transparent via-primary/10 to-transparent animate-pulse opacity-60" />
-            </div>
-          )}
-          {items.map((item) => {
-            const isExpanded = expandedItems.has(item.id);
-            const isLongContent = item.content && item.content.length > 200;
-            const isOwnDevice = item.device_id === deviceId;
-            const isCopied = copiedItems.has(item.id);
+        ) : (
+          <div className="space-y-0.5 p-1.5 sm:p-2 font-mono text-xs">
+            {items.map((item) => {
+              const isExpanded = expandedItems.has(item.id);
+              const isLongContent = item.content && item.content.length > 200;
+              const isOwnDevice = item.device_id === deviceId;
+              const isCopied = copiedItems.has(item.id);
 
-            return (
-              <Card
-                key={item.id}
-                className={`hover:shadow-md transition-all duration-200 ${
-                  isRefreshing
-                    ? "bg-gradient-to-r from-background via-muted/20 to-background animate-pulse border-primary/20"
-                    : ""
-                }`}
-              >
-                <div className="p-3 sm:p-4">
-                  {/* Compact Header */}
-                  <div className="flex items-center justify-between gap-3 mb-3">
-                    <div className="flex items-center gap-2 min-w-0">
-                      {getDeviceIcon(item.device_name || "device")}
-                      <span className="text-sm font-medium text-foreground truncate">
-                        {item.device_name || "Device"}
-                        {isOwnDevice && (
-                          <span className="text-muted-foreground ml-1">
-                            (You)
-                          </span>
-                        )}
-                      </span>
-                      <Badge
-                        variant="outline"
-                        className="text-xs h-5 px-1.5 capitalize ml-2"
-                      >
-                        {item.kind}
-                      </Badge>
-                    </div>
-                    <span className="text-xs text-muted-foreground flex-shrink-0">
-                      {new Date(item.created_at).toLocaleTimeString([], {
-                        hour: "2-digit",
-                        minute: "2-digit",
-                      })}
-                    </span>
-                  </div>
+              // Log-style color coding
+              const typeColors = {
+                text: "text-blue-400 dark:text-blue-500",
+                code: "text-purple-400 dark:text-purple-500",
+                file: "text-green-400 dark:text-green-500",
+              };
+              const typeBg = {
+                text: "bg-blue-500/5 hover:bg-blue-500/10",
+                code: "bg-purple-500/5 hover:bg-purple-500/10",
+                file: "bg-green-500/5 hover:bg-green-500/10",
+              };
 
-                  {/* File Content - Clean & Compact */}
-                  {item.kind === "file" ? (
-                    <div className="flex items-center gap-3 p-3 bg-muted/30 rounded-lg">
-                      <div className="flex-shrink-0">
-                        {getFileIcon(item.file_mime_type)}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="font-medium text-foreground truncate text-sm">
-                          {item.file_name || "Unknown File"}
-                        </div>
-                        <div className="flex items-center gap-2 mt-0.5 text-xs text-muted-foreground">
-                          {item.file_size && (
-                            <span>{formatFileSize(item.file_size)}</span>
-                          )}
-                          {item.file_mime_type && item.file_size && (
-                            <span>•</span>
-                          )}
-                          {item.file_mime_type && (
-                            <span>{getFileType(item.file_mime_type)}</span>
-                          )}
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-1 flex-shrink-0">
-                        <FilePreview
-                          fileName={item.file_name || "file"}
-                          fileUrl={item.file_download_url || ""}
-                          mimeType={item.file_mime_type || ""}
-                          size={item.file_size || 0}
-                          onDownload={() => {
-                            if (item.file_download_url) {
-                              const link = document.createElement("a");
-                              link.href = item.file_download_url;
-                              link.download = item.file_name || "download";
-                              document.body.appendChild(link);
-                              link.click();
-                              document.body.removeChild(link);
+              return (
+                <div
+                  key={item.id}
+                  className={`relative group rounded border border-border/40 ${typeBg[item.kind]} transition-colors`}
+                >
+                  {/* Shimmer effect during refresh */}
+                  {isRefreshing && (
+                    <div className="absolute inset-0 z-10 bg-gradient-to-r from-transparent via-white/20 to-transparent dark:via-white/5 animate-shimmer pointer-events-none rounded" />
+                  )}
+
+                  {/* LOG ENTRY - Single compact line */}
+                  <div className="flex items-start gap-2 px-2 py-1.5">
+                    {/* Timestamp - Terminal style */}
+                    <div className="flex-shrink-0 text-[10px] text-muted-foreground/70 font-mono mt-0.5">
+                      {item.display_created_at ? (
+                        <span>
+                          {new Date(item.display_created_at).toLocaleTimeString(
+                            [],
+                            {
+                              hour: "2-digit",
+                              minute: "2-digit",
+                              second: "2-digit",
+                              hour12: false,
                             }
-                          }}
-                        />
-                        {item.file_download_url && (
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            onClick={() => {
-                              const link = document.createElement("a");
-                              link.href = item.file_download_url!;
-                              link.download = item.file_name || "download";
-                              document.body.appendChild(link);
-                              link.click();
-                              document.body.removeChild(link);
-                            }}
-                            className="h-8 w-8 p-0 hover:bg-muted/50"
-                            title="Download file"
-                          >
-                            <Download className="h-4 w-4" />
-                          </Button>
-                        )}
-                      </div>
+                          )}
+                        </span>
+                      ) : (
+                        <span>--:--:--</span>
+                      )}
                     </div>
-                  ) : (
-                    <div>
-                      <div className="relative group">
-                        {item.kind === "code" ? (
-                          <pre className="p-3 rounded-lg bg-muted/30 text-xs sm:text-sm font-mono text-foreground overflow-x-auto scrollbar-thin">
-                            {isLongContent && !isExpanded
-                              ? truncateContent(item.content || "")
-                              : item.content}
-                          </pre>
-                        ) : shouldRenderAsMarkdown(item.content || "") ? (
-                          <div
-                            className="prose prose-xs sm:prose-sm max-w-none p-3 rounded-lg bg-muted/30 text-foreground prose-headings:text-foreground prose-p:text-foreground prose-strong:text-foreground prose-code:text-foreground prose-pre:bg-muted prose-blockquote:text-muted-foreground"
-                            dangerouslySetInnerHTML={{
-                              __html: renderMarkdown(
-                                isLongContent && !isExpanded
-                                  ? truncateContent(item.content || "")
-                                  : item.content || ""
-                              ),
+
+                    {/* Type indicator - Single char */}
+                    <div
+                      className={`flex-shrink-0 font-bold ${typeColors[item.kind]} mt-0.5`}
+                    >
+                      {item.kind === "text"
+                        ? "T"
+                        : item.kind === "code"
+                          ? "C"
+                          : "F"}
+                    </div>
+
+                    {/* Device - Compact */}
+                    <div className="flex-shrink-0 text-[10px] text-muted-foreground/70 min-w-[60px] max-w-[80px] truncate mt-0.5">
+                      {item.device_name || "unknown"}
+                      {isOwnDevice && (
+                        <span className="text-primary ml-1">*</span>
+                      )}
+                    </div>
+
+                    {/* Content Preview - Main section */}
+                    <div className="flex-1 min-w-0">
+                      {item.kind === "file" ? (
+                        <div className="flex items-center gap-2">
+                          <span className="text-foreground/90 truncate font-medium">
+                            {item.file_name || "unknown.file"}
+                          </span>
+                          <span className="text-[10px] text-muted-foreground/60">
+                            {item.file_size
+                              ? formatFileSize(item.file_size)
+                              : ""}
+                          </span>
+                        </div>
+                      ) : (
+                        <div className="text-foreground/90 truncate leading-tight">
+                          {item.content && item.content.length > 100
+                            ? item.content.substring(0, 100) + "..."
+                            : item.content}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Action buttons - Hover visible */}
+                    <div className="flex items-center gap-0.5 flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+                      {item.kind === "file" ? (
+                        <>
+                          <FilePreview
+                            fileName={item.file_name || "file"}
+                            fileUrl={item.file_download_url || ""}
+                            mimeType={item.file_mime_type || ""}
+                            size={item.file_size || 0}
+                            onDownload={() => {
+                              if (item.file_download_url) {
+                                const link = document.createElement("a");
+                                link.href = item.file_download_url;
+                                link.download = item.file_name || "download";
+                                document.body.appendChild(link);
+                                link.click();
+                                document.body.removeChild(link);
+                              }
                             }}
                           />
-                        ) : (
-                          <div className="p-3 rounded-lg bg-muted/30 text-sm text-foreground whitespace-pre-wrap break-words">
-                            {isLongContent && !isExpanded
-                              ? truncateContent(item.content || "")
-                              : item.content}
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Compact Action bar */}
-                      <div className="flex items-center justify-between gap-2 mt-2 pt-2 border-t border-border/30">
-                        <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                          <span>{item.content?.length || 0} chars</span>
+                          {item.file_download_url && (
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => {
+                                const link = document.createElement("a");
+                                link.href = item.file_download_url!;
+                                link.download = item.file_name || "download";
+                                document.body.appendChild(link);
+                                link.click();
+                                document.body.removeChild(link);
+                              }}
+                              className="h-5 w-5 p-0"
+                              title="Download"
+                            >
+                              <Download className="h-2.5 w-2.5" />
+                            </Button>
+                          )}
+                        </>
+                      ) : (
+                        <>
                           {isLongContent && (
                             <Button
                               size="sm"
                               variant="ghost"
                               onClick={() => toggleExpanded(item.id)}
-                              className="h-6 px-2 text-xs hover:bg-muted/50"
+                              className="h-5 w-5 p-0"
+                              title={isExpanded ? "Collapse" : "Expand"}
                             >
                               {isExpanded ? (
-                                <>
-                                  <ChevronDown className="h-3 w-3" />
-                                  <span className="ml-1">Less</span>
-                                </>
+                                <ChevronDown className="h-2.5 w-2.5" />
                               ) : (
-                                <>
-                                  <ChevronRight className="h-3 w-3" />
-                                  <span className="ml-1">More</span>
-                                </>
+                                <ChevronRight className="h-2.5 w-2.5" />
                               )}
                             </Button>
                           )}
-                        </div>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() =>
+                              copyToClipboard(item.content || "", item.id)
+                            }
+                            className="h-5 w-5 p-0"
+                            title="Copy"
+                          >
+                            {isCopied ? (
+                              <Check className="h-2.5 w-2.5 text-green-500" />
+                            ) : (
+                              <Copy className="h-2.5 w-2.5" />
+                            )}
+                          </Button>
+                        </>
+                      )}
+                      {allowItemDeletion && item.device_id === deviceId && (
                         <Button
                           size="sm"
                           variant="ghost"
-                          onClick={() =>
-                            copyToClipboard(item.content || "", item.id)
-                          }
-                          className="h-8 w-8 p-0 hover:bg-muted/50"
-                          title="Copy content"
+                          onClick={() => deleteItem(item.id)}
+                          className="h-5 w-5 p-0 hover:text-destructive"
+                          title="Delete"
                         >
-                          {isCopied ? (
-                            <Check className="h-4 w-4 text-green-500" />
-                          ) : (
-                            <Copy className="h-4 w-4" />
-                          )}
+                          <Trash2 className="h-2.5 w-2.5" />
                         </Button>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Expanded content - Only shown when clicked */}
+                  {isExpanded && item.kind !== "file" && (
+                    <div className="px-2 pb-2 pl-[120px]">
+                      <div className="border-t border-border/40 pt-1.5">
+                        {item.kind === "code" ? (
+                          <pre className="p-2 rounded bg-muted/30 text-[10px] font-mono text-foreground whitespace-pre-wrap break-words max-h-60 overflow-y-auto">
+                            {item.content}
+                          </pre>
+                        ) : shouldRenderAsMarkdown(item.content || "") ? (
+                          <div
+                            className="prose prose-sm max-w-none p-2 rounded bg-muted/30 text-[10px] prose-headings:text-xs prose-p:text-[10px] max-h-60 overflow-y-auto"
+                            dangerouslySetInnerHTML={{
+                              __html: renderMarkdown(item.content || ""),
+                            }}
+                          />
+                        ) : (
+                          <div className="p-2 rounded bg-muted/30 text-[10px] text-foreground whitespace-pre-wrap break-words max-h-60 overflow-y-auto">
+                            {item.content}
+                          </div>
+                        )}
                       </div>
                     </div>
                   )}
                 </div>
-              </Card>
-            );
-          })}
-        </div>
-      )}
+              );
+            })}
+          </div>
+        )}
+      </div>
+      {/* End of scrollable items area */}
 
       {/* Session Expired Dialog */}
       <AlertDialog
@@ -1089,34 +1375,85 @@ export default function ItemsList({ code }: { code: string }) {
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Session Killed Dialog */}
-      <AlertDialog open={sessionKilledOpen} onOpenChange={setSessionKilledOpen}>
-        <AlertDialogContent className="max-w-md">
+      {/* Session Killed Dialog - Full Screen Overlay */}
+      {sessionKilledOpen && (
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-300 min-h-screen">
+          <div className="relative max-w-md w-full">
+            <div className="relative bg-card backdrop-blur-xl border-2 border-destructive/50 shadow-2xl rounded-2xl p-6 sm:p-8 text-center overflow-hidden animate-in zoom-in-95 duration-500">
+              <div className="absolute inset-0 rounded-2xl bg-gradient-to-r from-destructive/10 via-destructive/5 to-destructive/10 blur-xl"></div>
+              <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-destructive via-destructive/80 to-destructive"></div>
+
+              <div className="relative z-10">
+                <div className="mx-auto mb-4 sm:mb-6 w-16 h-16 sm:w-20 sm:h-20 rounded-xl sm:rounded-2xl bg-gradient-to-br from-destructive/80 to-destructive flex items-center justify-center shadow-lg">
+                  <Trash2
+                    className="h-8 w-8 sm:h-10 sm:w-10 text-destructive-foreground"
+                    strokeWidth={2.5}
+                  />
+                </div>
+
+                <h3 className="text-xl sm:text-2xl font-bold mb-3 text-destructive">
+                  Session Terminated
+                </h3>
+
+                <p className="text-sm text-muted-foreground mb-6">
+                  The session has been terminated by the host.
+                </p>
+
+                <div className="my-6 sm:my-8">
+                  <div className="inline-flex items-center justify-center w-20 h-20 sm:w-24 sm:h-24 rounded-full bg-gradient-to-br from-destructive to-destructive/80 shadow-xl shadow-destructive/30 animate-pulse">
+                    <span className="text-4xl sm:text-5xl font-bold text-destructive-foreground">
+                      {killCountdown}
+                    </span>
+                  </div>
+                </div>
+
+                <p className="text-xs sm:text-sm text-muted-foreground flex items-center justify-center gap-2">
+                  <Timer className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                  Returning to home screen...
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+      {isLeaving && <LeavingCountdown reason={leaveReason} />}
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog
+        open={deleteConfirm.open}
+        onOpenChange={(open) => {
+          if (!open) setDeleteConfirm({ open: false, itemId: null });
+        }}
+      >
+        <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle className="text-center text-destructive">
-              Session Terminated
-            </AlertDialogTitle>
-            <AlertDialogDescription className="text-center">
-              The session has been terminated by the host.
-              <br />
-              <span className="font-medium mt-2 block">
-                Redirecting in {killCountdown} seconds...
-              </span>
+            <AlertDialogTitle>Delete Item</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete this item? This action cannot be
+              undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
-          <AlertDialogFooter className="justify-center">
-            <AlertDialogAction
-              onClick={() => {
-                setSessionKilledOpen(false);
-                window.location.href = "/";
-              }}
-              className="w-full"
+          <AlertDialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setDeleteConfirm({ open: false, itemId: null })}
             >
-              Go to Home Now
-            </AlertDialogAction>
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={confirmDeleteItem}>
+              Delete
+            </Button>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Error Dialog */}
+      <ErrorDialog
+        open={errorDialog.open}
+        onClose={() => setErrorDialog({ open: false, title: "", message: "" })}
+        title={errorDialog.title}
+        message={errorDialog.message}
+      />
     </div>
   );
 }
