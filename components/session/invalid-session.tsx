@@ -38,7 +38,7 @@ export default function InvalidSession({
       <div className="w-full max-w-md">
         <Card className="border-destructive/20">
           <CardHeader className="text-center space-y-4">
-            <div className="mx-auto w-16 h-16 bg-destructive/10 rounded-xl border border-destructive/20 flex items-center justify-center">
+            <div className="mx-auto w-16 h-16 bg-destructive/10 rounded-sm border border-destructive/20 flex items-center justify-center">
               <AlertCircle className="h-8 w-8 text-destructive" />
             </div>
             <div>

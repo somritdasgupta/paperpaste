@@ -1,22 +1,32 @@
-import { Suspense } from "react";
+"use client";
+
+import { Suspense, useState } from "react";
 import SessionHeader from "@/components/session/session-header";
 import ClipboardInput from "@/components/session/clipboard-input";
 import ItemsList from "@/components/session/items-list";
 import PairingScreen from "@/components/session/pairing-screen";
+import { useSearchParams } from "next/navigation";
 
 type Props = {
   params: Promise<{ code: string }>;
-  searchParams: Promise<{ [k: string]: string | string[] | undefined }>;
 };
 
-export default async function SessionPage({ params, searchParams }: Props) {
-  const { code } = await params;
-  const searchParamsResolved = await searchParams;
-  const joined = searchParamsResolved?.join === "1";
-  const isNew = searchParamsResolved?.new === "1";
+export default function SessionPage({ params }: Props) {
+  const [code, setCode] = useState<string>("");
+  const searchParams = useSearchParams();
+  const joined = searchParams?.get("join") === "1";
+  const isNew = searchParams?.get("new") === "1";
+
+  // Unwrap params
+  params.then((p) => setCode(p.code));
+
+  // Don't render until we have the code
+  if (!code) {
+    return null;
+  }
 
   // Basic session code format validation
-  if (!code || code.length !== 7 || !/^[A-Z0-9]{7}$/.test(code)) {
+  if (code.length !== 7 || !/^[A-Z0-9]{7}$/.test(code)) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-background via-background to-destructive/5 flex items-center justify-center p-4">
         <div className="w-full max-w-md">
@@ -44,38 +54,34 @@ export default async function SessionPage({ params, searchParams }: Props) {
   }
 
   return (
-    <main className="flex flex-col min-h-screen w-full bg-background">
-      {/* Header with better mobile spacing */}
-      <div className="flex-none px-3 sm:px-4 lg:px-8 py-3 sm:py-4 lg:py-6 border-b">
+    <main className="relative flex flex-col h-screen w-full bg-background overflow-hidden">
+      {/* Subtle Grid Background Only */}
+      <div className="absolute inset-0 pointer-events-none overflow-hidden z-0 opacity-30">
+        <div className="absolute inset-0 bg-[linear-gradient(to_right,#80808008_1px,transparent_1px),linear-gradient(to_bottom,#80808008_1px,transparent_1px)] bg-[size:4rem_4rem]"></div>
+      </div>
+
+      {/* Compact Header */}
+      <div className="relative z-10 flex-none px-3 sm:px-4 py-2 sm:py-3 border-b bg-card/50 backdrop-blur-sm">
         <div className="mx-auto w-full">
           <SessionHeader code={code} />
         </div>
       </div>
 
-      {/* Main content area */}
-      <div className="flex-1 flex flex-col px-3 sm:px-4 lg:px-8 py-3 sm:py-4 lg:py-6 gap-3 sm:gap-4 lg:gap-6">
-        <div className="mx-auto w-full flex-1 flex flex-col gap-3 sm:gap-4 lg:gap-6">
-          {/* Input section */}
-          <section className="flex-none rounded-lg sm:rounded-xl border bg-card p-3 sm:p-4 lg:p-6 shadow-sm">
-            <ClipboardInput code={code} />
-          </section>
-
-          {/* Items section with better mobile layout */}
-          <section className="flex-1 rounded-lg sm:rounded-xl border bg-card overflow-hidden flex flex-col shadow-sm min-h-0">
-            <div className="flex-1 overflow-auto min-h-0">
-              <Suspense
-                fallback={
-                  <div className="p-3 sm:p-4 text-xs sm:text-sm text-muted-foreground animate-pulse">
-                    Loading items…
-                  </div>
-                }
-              >
-                <ItemsList code={code} />
-              </Suspense>
+      {/* History section - Takes full height with bottom padding for fixed input */}
+      <section className="relative z-10 flex-1 overflow-auto pb-20">
+        <Suspense
+          fallback={
+            <div className="p-4 text-sm text-muted-foreground animate-pulse">
+              Loading history…
             </div>
-          </section>
-        </div>
-      </div>
+          }
+        >
+          <ItemsList code={code} />
+        </Suspense>
+      </section>
+
+      {/* Input section - Fixed at bottom (handled by ClipboardInput component) */}
+      <ClipboardInput code={code} />
     </main>
   );
 }

@@ -82,7 +82,7 @@ export function QRScanner({ isOpen, onClose, onDetected }: Props) {
       role="dialog"
       aria-modal="true"
     >
-      <div className="w-full max-w-md bg-background text-foreground rounded-lg shadow-lg overflow-hidden">
+      <div className="w-full max-w-md bg-background text-foreground rounded-sm shadow-lg overflow-hidden">
         <div className="p-4 border-b flex items-center justify-between">
           <h2 className="font-semibold text-lg">Scan QR</h2>
           <button
@@ -97,7 +97,7 @@ export function QRScanner({ isOpen, onClose, onDetected }: Props) {
         </div>
 
         <div className="p-4 flex flex-col gap-4">
-          <div className="aspect-square w-full bg-black rounded-md overflow-hidden">
+          <div className="aspect-square w-full bg-black rounded-sm overflow-hidden">
             <video
               ref={videoRef}
               className="w-full h-full object-cover"

@@ -182,7 +182,7 @@ export default function JoinForm({ prefilledCode }: JoinFormProps) {
               "text-center font-medium session-code",
               "min-w-0 flex-1 px-1 sm:px-2",
               "border-2 focus:border-primary",
-              "rounded-lg transition-all duration-200",
+              "rounded-sm transition-all duration-200",
               "touch-manipulation", // Improves touch responsiveness
               "selection:bg-primary/20", // Better text selection color
               validationError &&
@@ -194,7 +194,7 @@ export default function JoinForm({ prefilledCode }: JoinFormProps) {
       </div>
 
       {validationError && (
-        <div className="text-sm text-destructive text-center bg-destructive/10 border border-destructive/20 rounded-md p-2 max-w-md mx-auto">
+        <div className="text-sm text-destructive text-center bg-destructive/10 border border-destructive/20 rounded-sm p-2 max-w-md mx-auto">
           {validationError}
         </div>
       )}
