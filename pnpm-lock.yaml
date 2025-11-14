@@ -98,9 +98,6 @@ importers:
       '@supabase/supabase-js':
         specifier: latest
         version: 2.81.1
-      '@types/dompurify':
-        specifier: ^3.2.0
-        version: 3.2.0
       '@vercel/analytics':
         specifier: latest
         version: 1.5.0(next@16.0.2(react-dom@19.2.0(react@19.2.0))(react@19.2.0))(react@19.2.0)
@@ -1350,10 +1347,6 @@ packages:
 
   '@types/d3@7.4.3':
     resolution: {integrity: sha512-lZXZ9ckh5R8uiFVt8ogUNf+pIrK4EsWrx2Np75WvF/eTpJ0FMHNhjXk8CKEx/+gpHbNQyJWehbFaTvqmHWB3ww==}
-
-  '@types/dompurify@3.2.0':
-    resolution: {integrity: sha512-Fgg31wv9QbLDA0SpTOXO3MaxySc4DKGLi8sna4/Utjo4r3ZRPdCt4UQee8BWr+Q5z21yifghREPJGYaEOEIACg==}
-    deprecated: This is a stub types definition. dompurify provides its own type definitions, so you do not need this installed.
 
   '@types/geojson@7946.0.16':
     resolution: {integrity: sha512-6C8nqWur3j98U6+lXDfTUWIfgvZU+EumvpHKcYjujKH7woYyLj2sUmff0tRhrqM7BohUw7Pz3ZB1jj2gW9Fvmg==}
@@ -3270,10 +3263,6 @@ snapshots:
       '@types/d3-timer': 3.0.2
       '@types/d3-transition': 3.0.9
       '@types/d3-zoom': 3.0.8
-
-  '@types/dompurify@3.2.0':
-    dependencies:
-      dompurify: 3.2.7
 
   '@types/geojson@7946.0.16': {}
 

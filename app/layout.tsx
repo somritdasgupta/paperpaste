@@ -10,36 +10,10 @@ import GlobalRefresh from "@/components/global-refresh";
 import { PageTransition } from "@/components/page-transition";
 import { Suspense } from "react";
 
-import {
-  Plus_Jakarta_Sans as V0_Font_Plus_Jakarta_Sans,
-  IBM_Plex_Mono as V0_Font_IBM_Plex_Mono,
-  Lora as V0_Font_Lora,
-} from "next/font/google";
-
-// Initialize fonts
-const _plusJakartaSans = V0_Font_Plus_Jakarta_Sans({
-  subsets: ["latin"],
-  weight: ["200", "300", "400", "500", "600", "700", "800"],
-});
-const _ibmPlexMono = V0_Font_IBM_Plex_Mono({
-  subsets: ["latin"],
-  weight: ["100", "200", "300", "400", "500", "600", "700"],
-});
-const _lora = V0_Font_Lora({
-  subsets: ["latin"],
-  weight: ["400", "500", "600", "700"],
-});
-
 export const metadata: Metadata = {
   title: "PaperPaste",
   description: "Real-time clipboard sync across your devices.",
   generator: "somritdasgupta",
-  viewport: {
-    width: "device-width",
-    initialScale: 1,
-    maximumScale: 1,
-    userScalable: false,
-  },
   icons: {
     icon: [
       {
@@ -49,6 +23,13 @@ export const metadata: Metadata = {
       },
     ],
   },
+};
+
+export const viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
 };
 
 export default function RootLayout({
