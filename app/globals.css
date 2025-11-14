@@ -195,15 +195,35 @@
   body {
     @apply bg-background text-foreground;
   }
+
+  /* Disable scrollbars globally */
+  * {
+    scrollbar-width: none; /* Firefox */
+    -ms-overflow-style: none; /* IE and Edge */
+  }
+  *::-webkit-scrollbar {
+    display: none; /* Chrome, Safari, Opera */
+  }
+
+  /* Prevent mobile zoom on input focus */
+  input,
+  textarea,
+  select {
+    font-size: 16px !important;
+    touch-action: manipulation;
+  }
 }
 
 /* Session Code Styling */
 .session-code {
-  font-family: "IBM Plex Mono", "Menlo", "Monaco", "Consolas", "Liberation Mono",
+  font-family:
+    "IBM Plex Mono", "Menlo", "Monaco", "Consolas", "Liberation Mono",
     "Courier New", monospace;
   font-weight: 700;
   letter-spacing: 0.05em;
-  font-feature-settings: "tnum" 1, "lnum" 1;
+  font-feature-settings:
+    "tnum" 1,
+    "lnum" 1;
   text-rendering: optimizeLegibility;
 }
 
@@ -299,5 +319,19 @@
       -webkit-appearance: none;
       margin: 0;
     }
+  }
+
+  /* Custom animations */
+  @keyframes spin-slow {
+    from {
+      transform: rotate(0deg);
+    }
+    to {
+      transform: rotate(360deg);
+    }
+  }
+
+  .animate-spin-slow {
+    animation: spin-slow 20s linear infinite;
   }
 }

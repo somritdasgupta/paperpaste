@@ -7,6 +7,7 @@ import "./globals.css";
 
 import ThemeInit from "@/components/theme-init";
 import GlobalRefresh from "@/components/global-refresh";
+import { PageTransition } from "@/components/page-transition";
 import { Suspense } from "react";
 
 import {
@@ -33,6 +34,12 @@ export const metadata: Metadata = {
   title: "PaperPaste",
   description: "Real-time clipboard sync across your devices.",
   generator: "somritdasgupta",
+  viewport: {
+    width: "device-width",
+    initialScale: 1,
+    maximumScale: 1,
+    userScalable: false,
+  },
   icons: {
     icon: [
       {
@@ -60,7 +67,9 @@ export default function RootLayout({
         <GlobalRefresh interval={3000} />
         <Suspense>
           <div className="min-h-dvh flex flex-col">
-            <div className="flex-1">{children}</div>
+            <div className="flex-1">
+              <PageTransition>{children}</PageTransition>
+            </div>
             {/* Site footer credits */}
             <footer className="w-full border-t bg-card">
               <div className="mx-auto w-full px-6 py-6 text-sm flex flex-col md:flex-row items-center justify-between gap-2">

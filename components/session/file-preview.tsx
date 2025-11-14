@@ -92,11 +92,11 @@ export default function FilePreview({
     // Image preview
     if (mimeType.startsWith("image/")) {
       return (
-        <div className="flex justify-center items-center bg-muted/30 rounded-lg p-2 sm:p-4 min-h-[150px] sm:min-h-[200px] overflow-auto">
+        <div className="flex justify-center items-center bg-muted/30 rounded-sm p-2 sm:p-4 min-h-[150px] sm:min-h-[200px] overflow-auto">
           <img
             src={fileUrl}
             alt={fileName}
-            className="max-w-full max-h-full object-contain rounded-lg shadow-sm"
+            className="max-w-full max-h-full object-contain rounded-sm shadow-sm"
             style={{
               maxHeight: "60vh",
               maxWidth: "100%",
@@ -146,10 +146,10 @@ export default function FilePreview({
     // Video preview
     if (mimeType.startsWith("video/")) {
       return (
-        <div className="flex justify-center bg-muted/30 rounded-lg p-2 sm:p-4">
+        <div className="flex justify-center bg-muted/30 rounded-sm p-2 sm:p-4">
           <video
             controls
-            className="w-full max-h-[60vh] rounded-lg shadow-sm"
+            className="w-full max-h-[60vh] rounded-sm shadow-sm"
             style={{
               maxWidth: "100%",
               height: "auto",
@@ -181,12 +181,12 @@ export default function FilePreview({
     if (mimeType === "application/pdf") {
       return (
         <div
-          className="relative bg-muted/30 rounded-lg"
+          className="relative bg-muted/30 rounded-sm"
           style={{ height: "60vh", minHeight: "300px" }}
         >
           <iframe
             src={`${fileUrl}#view=FitH`}
-            className="w-full h-full rounded-lg border"
+            className="w-full h-full rounded-sm border"
             title={fileName}
             style={{
               minHeight: "300px",
@@ -212,7 +212,7 @@ export default function FilePreview({
         <div className="h-64 overflow-auto">
           <iframe
             src={fileUrl}
-            className="w-full h-full rounded-lg border"
+            className="w-full h-full rounded-sm border"
             title={fileName}
             onLoad={() => setLoading(false)}
             onError={() => {

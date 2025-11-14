@@ -233,11 +233,13 @@ export async function encryptFile(file: File, sessionKey: CryptoKey): Promise<{ 
   }
   const encryptedData = btoa(binaryString);
   
+  // IMPORTANT: Always use the ORIGINAL file's MIME type, not the compressed file's type
+  // This ensures proper file type detection during decryption and download
   return {
     encryptedData,
     originalName: file.name,
-    mimeType: file.type || 'application/octet-stream',
-    size: compressedFile.size, // Use compressed size
+    mimeType: file.type || 'application/octet-stream', // Use original MIME type
+    size: file.size, // Use original size for display
     compressionRatio
   };
 }
@@ -258,8 +260,11 @@ export async function decryptFile(encryptedData: string, sessionKey: CryptoKey, 
       encrypted
     );
     
-    // Check if this was a compressed file
-    if (mimeType === 'application/gzip-compressed') {
+    // Check if this was a compressed file by checking the first few bytes
+    const dataView = new DataView(decrypted);
+    const isGzipped = decrypted.byteLength >= 2 && dataView.getUint8(0) === 0x1f && dataView.getUint8(1) === 0x8b;
+    
+    if (isGzipped) {
       try {
         if (typeof DecompressionStream !== 'undefined') {
           const decompressionStream = new DecompressionStream('gzip');
@@ -267,14 +272,21 @@ export async function decryptFile(encryptedData: string, sessionKey: CryptoKey, 
           const decompressedResponse = new Response(response.body!.pipeThrough(decompressionStream));
           const decompressedArrayBuffer = await decompressedResponse.arrayBuffer();
           
-          // Return decompressed blob with generic binary type (original type will be set when creating the file)
-          return new Blob([decompressedArrayBuffer], { type: 'application/octet-stream' });
+          // Return decompressed blob with the correct MIME type
+          return new Blob([decompressedArrayBuffer], { type: mimeType });
+        } else {
+          console.warn('DecompressionStream not available, returning compressed data');
+          // Fall back to returning the data as-is if decompression isn't available
+          return new Blob([decrypted], { type: mimeType });
         }
       } catch (decompressError) {
-        console.warn('Decompression failed, using encrypted data as-is:', decompressError);
+        console.warn('Decompression failed, using data as-is:', decompressError);
+        // If decompression fails, return the data as-is
+        return new Blob([decrypted], { type: mimeType });
       }
     }
     
+    // Not compressed, return as-is
     return new Blob([decrypted], { type: mimeType });
   } catch (error) {
     console.error('File decryption failed:', error);
@@ -283,18 +295,44 @@ export async function decryptFile(encryptedData: string, sessionKey: CryptoKey, 
 }
 
 // Create a download URL for encrypted file with preview support
+// Falls back to data URL if createObjectURL is blocked by corporate policies
 export async function createEncryptedFileDownloadUrl(encryptedData: string, sessionKey: CryptoKey, mimeType: string, fileName?: string): Promise<string> {
   const blob = await decryptFile(encryptedData, sessionKey, mimeType);
   
-  // For compressed files, determine the original MIME type
-  let finalMimeType = mimeType;
-  if (mimeType === 'application/gzip-compressed' && fileName) {
-    finalMimeType = getOriginalMimeType(fileName);
+  // Blob already has correct MIME type from decryptFile
+  // Try to create object URL first
+  try {
+    const url = URL.createObjectURL(blob);
+    
+    // Test if blob URLs work by trying to fetch (will fail on corporate networks)
+    try {
+      await fetch(url, { method: 'HEAD' });
+      return url;
+    } catch (fetchError) {
+      // If HEAD fails, revoke and fall through to data URL
+      URL.revokeObjectURL(url);
+      throw new Error('Blob URL access blocked');
+    }
+  } catch (blobError) {
+    // Fallback to data URL for restricted environments (work laptops, etc.)
+    console.warn('Blob URL blocked by security policy, using data URL fallback');
+    
+    // Read blob as ArrayBuffer
+    const arrayBuffer = await blob.arrayBuffer();
+    const bytes = new Uint8Array(arrayBuffer);
+    
+    // Convert to base64 in chunks to avoid call stack issues
+    let binary = '';
+    const chunkSize = 8192;
+    for (let i = 0; i < bytes.length; i += chunkSize) {
+      const chunk = bytes.slice(i, i + chunkSize);
+      binary += String.fromCharCode.apply(null, Array.from(chunk));
+    }
+    const base64 = btoa(binary);
+    
+    // Return as data URL (works even with strict CSP)
+    return `data:${mimeType};base64,${base64}`;
   }
-  
-  // Ensure blob has correct MIME type for preview
-  const correctedBlob = new Blob([blob], { type: finalMimeType });
-  return URL.createObjectURL(correctedBlob);
 }
 
 // Helper function to determine original MIME type from filename
