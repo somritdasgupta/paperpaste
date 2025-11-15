@@ -79,7 +79,7 @@ export default function HomePage() {
   };
 
   return (
-    <main className="relative flex-1 bg-linear-to-br from-background via-background to-muted/30 overflow-hidden flex items-center justify-center">
+    <main className="relative h-full w-full bg-linear-to-br from-background via-background to-muted/30 overflow-hidden flex items-center justify-center pb-20">
       {/* Background Graphics */}
       <div className="absolute inset-0 pointer-events-none overflow-hidden z-0">
         {/* Gradient orbs */}
