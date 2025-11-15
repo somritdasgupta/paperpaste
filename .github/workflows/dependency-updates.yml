@@ -13,11 +13,11 @@ jobs:
     permissions:
       contents: write
       pull-requests: write
-
+    
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-
+ 
       - name: Install pnpm
         uses: pnpm/action-setup@v4
         with:
