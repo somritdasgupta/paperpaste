@@ -68,8 +68,8 @@ export default function RootLayout({
         {/* Global refresh scheduler for the whole webapp */}
         <GlobalRefresh interval={3000} />
         <Suspense>
-          <div className="min-h-dvh flex flex-col">
-            <div className="flex-1">
+          <div className="h-dvh flex flex-col">
+            <div className="flex-1 flex flex-col">
               <PageTransition>{children}</PageTransition>
             </div>
             {/* Site footer credits */}

@@ -79,9 +79,9 @@ export default function HomePage() {
   };
 
   return (
-    <main className="relative h-full bg-gradient-to-br from-background via-background to-muted/30 overflow-hidden">
+    <main className="relative flex-1 bg-gradient-to-br from-background via-background to-muted/30 overflow-hidden flex items-center justify-center">
       {/* Background Graphics */}
-      <div className="absolute inset-0 pointer-events-none overflow-hidden">
+      <div className="absolute inset-0 pointer-events-none overflow-hidden z-0">
         {/* Gradient orbs */}
         <div className="absolute top-20 left-10 w-72 h-72 bg-primary/5 rounded-full blur-3xl animate-pulse"></div>
         <div
@@ -116,8 +116,8 @@ export default function HomePage() {
         </svg>
       </div>
 
-      <div className="relative h-full flex flex-col items-center justify-center px-4 sm:px-6 lg:px-8 py-8">
-        <div className="w-full max-w-2xl mx-auto space-y-8">
+      <div className="relative z-10 w-full max-w-2xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div className="w-full space-y-8">
           {/* Header Section */}
           <div className="text-center space-y-4">
             <div className="inline-flex items-center gap-3 mb-2">
