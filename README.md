@@ -1,5 +1,9 @@
 # PaperPaste
 
+[![CI](https://github.com/somritdasgupta/paperpaste/actions/workflows/ci.yml/badge.svg)](https://github.com/somritdasgupta/paperpaste/actions/workflows/ci.yml)
+[![CodeQL](https://github.com/somritdasgupta/paperpaste/actions/workflows/codeql.yml/badge.svg)](https://github.com/somritdasgupta/paperpaste/actions/workflows/codeql.yml)
+[![Security Audit](https://github.com/somritdasgupta/paperpaste/actions/workflows/security-audit.yml/badge.svg)](https://github.com/somritdasgupta/paperpaste/actions/workflows/security-audit.yml)
+
 A secure, real-time clipboard sharing application with zero-knowledge end-to-end encryption. Share text, code, and files instantly across multiple devices with complete privacy.
 
 ## Features
