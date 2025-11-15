@@ -1,0 +1,35 @@
+name: Keep Alive Ping
+
+# Schedules a cron job that hits your app to prevent inactivity (free-tier sleeping).
+# Make sure to set the repository secret: KEEPALIVE_URL
+on:
+  schedule:
+    - cron: '*/5 * * * *' # every 5 minutes
+  workflow_dispatch: {}
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Curl keepalive URL
+        env:
+          KEEPALIVE_URL: ${{ secrets.KEEPALIVE_URL }}
+        run: |
+          if [ -z "$KEEPALIVE_URL" ]; then
+            echo "KEEPALIVE_URL secret not set. Failing job"; exit 1;
+          fi
+
+          echo "Pinging $KEEPALIVE_URL"
+          # retry up to 3 times with 10s delay between tries
+          for i in 1 2 3; do
+            status=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 "$KEEPALIVE_URL") || status=000
+            echo "Response: $status"
+            if [ "$status" = "200" ] || [ "$status" = "301" ] || [ "$status" = "302" ]; then
+              echo "OK — $KEEPALIVE_URL is reachable"
+              exit 0
+            fi
+            echo "Not reachable; attempt $i/3. Retrying in 10s..."
+            sleep 10
+          done
+
+          echo "ERROR: $KEEPALIVE_URL not reachable after 3 attempts"; exit 1
