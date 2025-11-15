@@ -8,6 +8,7 @@ import "./globals.css";
 import ThemeInit from "@/components/theme-init";
 import GlobalRefresh from "@/components/global-refresh";
 import { PageTransition } from "@/components/page-transition";
+import { Preloader } from "@/components/preloader";
 import { Suspense } from "react";
 
 import {
@@ -63,6 +64,7 @@ export default function RootLayout({
         suppressHydrationWarning={true}
       >
         <ThemeInit />
+        <Preloader />
         {/* Global refresh scheduler for the whole webapp */}
         <GlobalRefresh interval={3000} />
         <Suspense>
