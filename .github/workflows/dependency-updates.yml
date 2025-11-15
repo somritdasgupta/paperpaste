@@ -1,10 +1,11 @@
 name: Auto-update Dependencies
 
 on:
-    schedule:
-        # Run every Monday at 9:00 AM UTC
-        - cron: "0 9 * * 1"
-    workflow_dispatch: # Allow manual trigger
+    # Disabled automatic updates to prevent unwanted PRs
+    # schedule:
+    #     # Run every Monday at 9:00 AM UTC
+    #     - cron: "0 9 * * 1"
+    workflow_dispatch: # Allow manual trigger only
 
 jobs:
     update-dependencies:
