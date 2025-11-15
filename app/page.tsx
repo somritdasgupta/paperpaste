@@ -79,7 +79,7 @@ export default function HomePage() {
   };
 
   return (
-    <main className="relative min-h-screen bg-gradient-to-br from-background via-background to-muted/30 overflow-hidden">
+    <main className="relative h-full bg-gradient-to-br from-background via-background to-muted/30 overflow-hidden">
       {/* Background Graphics */}
       <div className="absolute inset-0 pointer-events-none overflow-hidden">
         {/* Gradient orbs */}
@@ -116,28 +116,28 @@ export default function HomePage() {
         </svg>
       </div>
 
-      <section className="relative w-full px-4 sm:px-6 lg:px-16 xl:px-24 pt-12 sm:pt-16 pb-8">
-        <div className="w-full text-center">
-          <div className="inline-flex items-center gap-3 mb-4">
-            <div className="p-2 rounded bg-primary/10 border border-primary/20">
-              <div className="h-6 w-6 bg-primary rounded"></div>
+      <div className="relative h-full flex flex-col items-center justify-center px-4 sm:px-6 lg:px-8 py-8">
+        <div className="w-full max-w-2xl mx-auto space-y-8">
+          {/* Header Section */}
+          <div className="text-center space-y-4">
+            <div className="inline-flex items-center gap-3 mb-2">
+              <div className="p-2 rounded bg-primary/10 border border-primary/20">
+                <div className="h-6 w-6 bg-primary rounded"></div>
+              </div>
             </div>
+            <h1 className="text-balance text-4xl sm:text-5xl lg:text-6xl font-extrabold tracking-tight">
+              PaperPaste
+            </h1>
+            <p className="text-pretty text-lg sm:text-xl text-muted-foreground">
+              Secure, real-time clipboard syncing across all your devices.
+            </p>
           </div>
-          <h1 className="text-balance text-4xl sm:text-5xl lg:text-6xl font-extrabold tracking-tight mb-4">
-            PaperPaste
-          </h1>
-          <p className="mt-2 text-pretty text-lg sm:text-xl lg:text-2xl text-muted-foreground max-w-3xl mx-auto">
-            Secure, real-time clipboard syncing across all your devices.
-          </p>
-        </div>
-      </section>
 
-      <section className="relative w-full px-4 sm:px-6 lg:px-8 py-4 sm:py-6 pb-8">
-        <div className="w-full mx-auto">
-          <EnvBanner />
-          <div className="grid lg:grid-cols-1 gap-8">
-            <Card className="p-4 sm:p-8 lg:p-12 text-center border-2 hover:border-primary/20 transition-colors">
-              <CardContent className="space-y-6 sm:space-y-8">
+          {/* Form Section */}
+          <div className="w-full">
+            <EnvBanner />
+            <Card className="p-6 sm:p-8 text-center border-2 hover:border-primary/20 transition-colors">
+              <CardContent className="space-y-6">
                 <JoinForm prefilledCode={prefilledCode} />
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-center gap-4">
                   <Button
@@ -153,7 +153,7 @@ export default function HomePage() {
             </Card>
           </div>
         </div>
-      </section>
+      </div>
 
       <QRScanner
         isOpen={scanOpen}
