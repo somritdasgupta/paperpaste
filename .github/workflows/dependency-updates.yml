@@ -9,8 +9,9 @@ jobs:
     update-dependencies:
         runs-on: ubuntu-latest
         permissions:
-            contents: write
-            pull-requests: write
+          contents: write
+          # prevent PR creation by removing write permission for pull-requests
+          pull-requests: read
 
         steps:
             - name: Checkout repository
