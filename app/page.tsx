@@ -79,7 +79,7 @@ export default function HomePage() {
   };
 
   return (
-    <main className="relative min-h-full w-full bg-linear-to-br from-background via-background to-muted/30 flex items-center justify-center py-8">
+    <main className="relative h-full w-full bg-linear-to-br from-background via-background to-muted/30 flex items-center justify-center">
       {/* Background Graphics */}
       <div className="fixed inset-0 pointer-events-none overflow-hidden z-0">
         {/* Gradient orbs */}
@@ -116,7 +116,7 @@ export default function HomePage() {
         </svg>
       </div>
 
-      <div className="relative z-10 w-full max-w-2xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div className="relative z-10 w-full max-w-2xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
         <div className="w-full space-y-6 sm:space-y-8">
           {/* Header Section */}
           <div className="text-center space-y-4">

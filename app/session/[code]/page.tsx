@@ -60,15 +60,15 @@ export default function SessionPage({ params }: Props) {
         <div className="absolute inset-0 bg-[linear-gradient(to_right,#80808008_1px,transparent_1px),linear-gradient(to_bottom,#80808008_1px,transparent_1px)] bg-[size:4rem_4rem]"></div>
       </div>
 
-      {/* Compact Header */}
-      <div className="relative z-10 flex-none px-3 sm:px-4 py-2 sm:py-3 border-b bg-card/50 backdrop-blur-sm">
+      {/* Compact Header - Fixed */}
+      <div className="fixed top-0 left-0 right-0 z-50 px-3 sm:px-4 py-2 sm:py-3 border-b bg-card/80 backdrop-blur-md">
         <div className="mx-auto w-full">
           <SessionHeader code={code} />
         </div>
       </div>
 
-      {/* History section - Takes full height with bottom padding for fixed input */}
-      <section className="relative z-10 flex-1 overflow-auto pb-20">
+      {/* History section - Takes full height with top padding for fixed header and bottom padding for fixed input */}
+      <section className="relative z-10 flex-1 overflow-auto pt-16 pb-20">
         <Suspense
           fallback={
             <div className="p-4 text-sm text-muted-foreground animate-pulse">

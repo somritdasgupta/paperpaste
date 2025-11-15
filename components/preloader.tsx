@@ -43,44 +43,46 @@ export function Preloader() {
 						></div>
 					</div>
 
-					<div className="relative flex flex-col items-center gap-8">
-						{/* Logo - Same as homepage */}
-						<motion.div
-							initial={{ scale: 0.8, opacity: 0 }}
-							animate={{ scale: 1, opacity: 1 }}
-							transition={{
-								duration: 0.5,
-								ease: "easeOut",
-							}}
-							className="inline-flex items-center gap-3 mb-2"
-						>
-							<motion.div 
-								className="p-3 rounded bg-primary/10 border border-primary/20"
-								animate={{
-									scale: [1, 1.05, 1],
-								}}
+					<div className="relative flex flex-col items-center">
+						<div className="space-y-4 text-center">
+							{/* Logo - Exact same as homepage */}
+							<motion.div
+								initial={{ scale: 0.8, opacity: 0 }}
+								animate={{ scale: 1, opacity: 1 }}
 								transition={{
-									duration: 2,
-									repeat: Infinity,
-									ease: "easeInOut",
+									duration: 0.5,
+									ease: "easeOut",
 								}}
+								className="inline-flex items-center gap-3 mb-2"
 							>
-								<div className="h-8 w-8 bg-primary rounded"></div>
+								<motion.div 
+									className="p-2 rounded bg-primary/10 border border-primary/20"
+									animate={{
+										scale: [1, 1.05, 1],
+									}}
+									transition={{
+										duration: 2,
+										repeat: Infinity,
+										ease: "easeInOut",
+									}}
+								>
+									<div className="h-6 w-6 bg-primary rounded"></div>
+								</motion.div>
 							</motion.div>
-						</motion.div>
 
-						{/* PaperPaste Text with blend animation */}
-						<motion.h1
-							initial={{ opacity: 0, y: 20 }}
-							animate={{ opacity: 1, y: 0 }}
-							transition={{ delay: 0.2, duration: 0.5 }}
-							className="text-4xl sm:text-5xl lg:text-6xl font-extrabold tracking-tight text-center"
-						>
-							PaperPaste
-						</motion.h1>
+							{/* PaperPaste Text - Exact same as homepage */}
+							<motion.h1
+								initial={{ opacity: 0, y: 20 }}
+								animate={{ opacity: 1, y: 0 }}
+								transition={{ delay: 0.2, duration: 0.5 }}
+								className="text-balance text-3xl sm:text-4xl lg:text-5xl font-extrabold tracking-tight"
+							>
+								PaperPaste
+							</motion.h1>
+						</div>
 
 						{/* Progress bar */}
-						<div className="w-64 sm:w-80">
+						<div className="w-64 sm:w-80 mt-8">
 							<div className="flex items-center justify-between mb-2">
 								<motion.p
 									initial={{ opacity: 0 }}
