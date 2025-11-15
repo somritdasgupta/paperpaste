@@ -35,12 +35,6 @@ export const metadata: Metadata = {
   title: "PaperPaste",
   description: "Real-time clipboard sync across your devices.",
   generator: "somritdasgupta",
-  viewport: {
-    width: "device-width",
-    initialScale: 1,
-    maximumScale: 1,
-    userScalable: false,
-  },
   icons: {
     icon: [
       {
@@ -51,6 +45,15 @@ export const metadata: Metadata = {
     ],
   },
 };
+
+export function generateViewport() {
+  return {
+    width: "device-width",
+    initialScale: 1,
+    maximumScale: 1,
+    userScalable: false,
+  };
+}
 
 export default function RootLayout({
   children,
