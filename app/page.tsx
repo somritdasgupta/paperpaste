@@ -79,7 +79,7 @@ export default function HomePage() {
   };
 
   return (
-    <main className="relative h-full w-full bg-linear-to-br from-background via-background to-muted/30 overflow-hidden flex items-center justify-center pb-20">
+    <main className="relative min-h-full w-full bg-linear-to-br from-background via-background to-muted/30 overflow-hidden flex items-center justify-center py-8">
       {/* Background Graphics */}
       <div className="absolute inset-0 pointer-events-none overflow-hidden z-0">
         {/* Gradient orbs */}
@@ -125,10 +125,10 @@ export default function HomePage() {
                 <div className="h-6 w-6 bg-primary rounded"></div>
               </div>
             </div>
-            <h1 className="text-balance text-4xl sm:text-5xl lg:text-6xl font-extrabold tracking-tight">
+            <h1 className="text-balance text-3xl sm:text-4xl lg:text-5xl font-extrabold tracking-tight">
               PaperPaste
             </h1>
-            <p className="text-pretty text-lg sm:text-xl text-muted-foreground">
+            <p className="text-pretty text-base sm:text-lg text-muted-foreground">
               Secure, real-time clipboard syncing across all your devices.
             </p>
           </div>

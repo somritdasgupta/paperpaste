@@ -276,8 +276,8 @@ export default function PairingScreen({
   };
 
   return (
-    <main className="min-h-screen bg-gradient-to-br from-background via-background to-muted/30 flex items-center justify-center p-4">
-      <div className="w-full max-w-4xl">
+    <main className="min-h-full bg-linear-to-br from-background via-background to-muted/30 flex items-center justify-center p-4 py-8">
+      <div className="w-full max-w-4xl mx-auto">
         {/* Header */}
         <div className="text-center mb-8">
           <div className="inline-flex items-center gap-3 mb-4">
@@ -292,10 +292,10 @@ export default function PairingScreen({
               {code}
             </Badge>
           </div>
-          <h1 className="text-4xl sm:text-5xl lg:text-6xl font-extrabold tracking-tight mb-4">
+          <h1 className="text-3xl sm:text-4xl lg:text-5xl font-extrabold tracking-tight mb-3">
             {isNew ? "Session Created" : "Join Session"}
           </h1>
-          <p className="text-xl text-muted-foreground max-w-2xl mx-auto leading-relaxed">
+          <p className="text-base sm:text-lg text-muted-foreground max-w-2xl mx-auto leading-relaxed">
             {isNew
               ? "Your secure session is ready. Share the link or QR code to connect devices."
               : hostDeviceName
@@ -307,10 +307,10 @@ export default function PairingScreen({
         {/* Main Content */}
         <div className="grid lg:grid-cols-2 gap-8 mb-8">
           {/* Left Side - QR Code */}
-          <Card className="p-8 text-center border-2 hover:border-primary/20 transition-colors">
+          <Card className="p-4 sm:p-8 text-center border-2 hover:border-primary/20 transition-colors">
             <CardHeader className="pb-6">
-              <CardTitle className="flex items-center justify-center gap-2 text-2xl">
-                <Shield className="h-6 w-6 text-primary" />
+              <CardTitle className="flex items-center justify-center gap-2 text-xl">
+                <Shield className="h-5 w-5 text-primary" />
                 Let's Connect
               </CardTitle>
             </CardHeader>
@@ -336,11 +336,11 @@ export default function PairingScreen({
           </Card>
 
           {/* Right Side - Device Connection */}
-          <Card className="p-8 border-2 hover:border-primary/20 transition-colors">
+          <Card className="p-4 sm:p-8 border-2 hover:border-primary/20 transition-colors">
             <CardHeader className="pb-6">
-              <CardTitle className="flex items-center justify-center gap-2 text-2xl">
+              <CardTitle className="flex items-center justify-center gap-2 text-xl">
                 {renderDetectedDeviceIcon()}
-                <CardDescription className="text-base text-center">
+                <CardDescription className="text-sm sm:text-base text-center">
                   {isNew ? "Start as session host" : "Join as participant"}
                 </CardDescription>
               </CardTitle>
@@ -546,8 +546,8 @@ export default function PairingScreen({
         </div>
 
         {/* Footer */}
-        <div className="text-center">
-          <p className="text-sm text-muted-foreground">
+        <div className="text-center pb-4">
+          <p className="text-xs sm:text-sm text-muted-foreground">
             PaperPaste is built on E2E encryption • No data stored on servers
           </p>
         </div>
