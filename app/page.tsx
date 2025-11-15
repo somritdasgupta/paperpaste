@@ -116,7 +116,7 @@ export default function HomePage() {
         </svg>
       </div>
 
-      <div className="relative z-10 w-full max-w-2xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+      <div className="relative z-10 w-full max-w-2xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="w-full space-y-6 sm:space-y-8">
           {/* Header Section */}
           <div className="text-center space-y-4">
@@ -136,7 +136,7 @@ export default function HomePage() {
           {/* Form Section */}
           <div className="w-full">
             <EnvBanner />
-            <Card className="p-6 sm:p-8 text-center border-2 hover:border-primary/20 transition-colors">
+            <Card className="p-6 sm:p-8 text-center border-2 hover:border-primary/20 transition-colors relative overflow-hidden animated-border-card">
               <CardContent className="space-y-6">
                 <JoinForm prefilledCode={prefilledCode} />
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-center gap-4">

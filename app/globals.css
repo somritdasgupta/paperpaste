@@ -335,4 +335,42 @@
   .animate-spin-slow {
     animation: spin-slow 20s linear infinite;
   }
+
+  /* Animated border glow trail */
+  @keyframes border-trail {
+    0% {
+      transform: rotate(0deg);
+    }
+    100% {
+      transform: rotate(360deg);
+    }
+  }
+
+  .animated-border-card::before {
+    content: '';
+    position: absolute;
+    inset: -2px;
+    border-radius: inherit;
+    padding: 2px;
+    background: conic-gradient(
+      from 0deg,
+      transparent 0%,
+      transparent 60%,
+      hsl(var(--primary)) 80%,
+      hsl(var(--primary) / 0.8) 90%,
+      transparent 100%
+    );
+    -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    -webkit-mask-composite: xor;
+    mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    mask-composite: exclude;
+    animation: border-trail 3s linear infinite;
+    pointer-events: none;
+    z-index: -1;
+  }
+
+  /* Enhanced glow for dark mode */
+  .dark .animated-border-card::before {
+    filter: blur(4px);
+  }
 }

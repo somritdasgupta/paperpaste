@@ -185,6 +185,8 @@ export default function JoinForm({ prefilledCode }: JoinFormProps) {
               "rounded-sm transition-all duration-200",
               "touch-manipulation", // Improves touch responsiveness
               "selection:bg-primary/20", // Better text selection color
+              "shadow-[0_0_15px_rgba(112,51,255,0.3)]", // Blue glow
+              "focus:shadow-[0_0_20px_rgba(112,51,255,0.5)]", // Stronger glow on focus
               validationError &&
                 "border-destructive focus-visible:ring-destructive",
               isValidating && "opacity-50"
