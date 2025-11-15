@@ -3,26 +3,33 @@
 import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 
+// Generate random positions once outside component to avoid hydration mismatch
+const randomPositions = Array.from({ length: 20 }, () => ({
+	x: Math.random() * 100,
+	y: Math.random() * 100,
+	delay: Math.random() * 2,
+}));
+
 export function Preloader() {
-  const [isLoading, setIsLoading] = useState(true);
+	const [isLoading, setIsLoading] = useState(true);
+	const [isMounted, setIsMounted] = useState(false);
 
-  useEffect(() => {
-    // Simulate loading time
-    const timer = setTimeout(() => {
-      setIsLoading(false);
-    }, 2000);
+	useEffect(() => {
+		setIsMounted(true);
+		// Simulate loading time
+		const timer = setTimeout(() => {
+			setIsLoading(false);
+		}, 2000);
 
-    return () => clearTimeout(timer);
-  }, []);
-
-  return (
+		return () => clearTimeout(timer);
+	}, []);  return (
     <AnimatePresence mode="wait">
       {isLoading && (
         <motion.div
           initial={{ opacity: 1 }}
           exit={{ opacity: 0, scale: 0.95 }}
           transition={{ duration: 0.5, ease: "easeInOut" }}
-          				className="fixed inset-0 z-50 flex items-center justify-center bg-linear-to-br from-background via-background to-muted"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-linear-to-br from-background via-background to-muted"
         >
           <div className="relative flex flex-col items-center gap-8">
             {/* Animated Logo/Icon */}
@@ -92,7 +99,7 @@ export function Preloader() {
               transition={{ delay: 0.2, duration: 0.5 }}
               className="flex flex-col items-center gap-3"
             >
-              						<h2 className="text-2xl font-bold bg-linear-to-r from-foreground to-foreground/60 bg-clip-text text-transparent">
+              <h2 className="text-2xl font-bold bg-linear-to-r from-foreground to-foreground/60 bg-clip-text text-transparent">
                 PaperPaste
               </h2>
 
@@ -125,19 +132,15 @@ export function Preloader() {
                 duration: 2,
                 ease: "easeInOut",
               }}
-              					className="h-1 bg-linear-to-r from-primary via-primary/80 to-primary rounded-full"
+              className="h-1 bg-linear-to-r from-primary via-primary/80 to-primary rounded-full"
               style={{ width: "200px" }}
             />
           </div>
 
           {/* Background decoration */}
-          <div className="absolute inset-0 overflow-hidden pointer-events-none">
-            {[...Array(20)].map((_, i) => {
-              const randomX = Math.random() * 100;
-              const randomY = Math.random() * 100;
-              const randomDelay = Math.random() * 2;
-
-              return (
+          {isMounted && (
+            <div className="absolute inset-0 overflow-hidden pointer-events-none">
+              {randomPositions.map((pos, i) => (
                 <motion.div
                   key={i}
                   initial={{
@@ -150,18 +153,18 @@ export function Preloader() {
                   transition={{
                     duration: 3,
                     repeat: Infinity,
-                    delay: randomDelay,
+                    delay: pos.delay,
                     ease: "easeInOut",
                   }}
                   className="absolute w-2 h-2 rounded-full bg-primary/20"
                   style={{
-                    left: `${randomX}%`,
-                    top: `${randomY}%`,
+                    left: `${pos.x}%`,
+                    top: `${pos.y}%`,
                   }}
                 />
-              );
-            })}
-          </div>
+              ))}
+            </div>
+          )}
         </motion.div>
       )}
     </AnimatePresence>
