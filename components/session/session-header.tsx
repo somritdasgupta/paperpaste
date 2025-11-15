@@ -179,8 +179,8 @@ function PermissionBadge({ code }: { code: string }) {
       <div
         className={`text-xs px-3 py-1.5 rounded-full font-semibold flex items-center gap-2 shadow-lg border-2 transition-all duration-300 animate-pulse ${
           state === "frozen"
-            ? "bg-gradient-to-r from-orange-500 to-amber-500 text-white border-orange-300 shadow-orange-500/50"
-            : "bg-gradient-to-r from-red-500 to-rose-600 text-white border-red-300 shadow-red-500/50"
+            ? "bg-linear-to-r from-orange-500 to-amber-500 text-white border-orange-300 shadow-orange-500/50"
+            : "bg-linear-to-r from-red-500 to-rose-600 text-white border-red-300 shadow-red-500/50"
         }`}
         style={{ animationDuration: "2s" }}
       >
@@ -605,7 +605,7 @@ export default function SessionHeader({ code }: { code: string }) {
 
             <button
               onClick={handleMobileCodeToggle}
-              className={`sm:hidden flex items-center gap-1 px-2 py-1 rounded-md hover:bg-muted transition-all duration-200 ${
+              className={`sm:hidden flex items-center gap-1 px-2 py-1 rounded hover:bg-muted transition-all duration-200 ${
                 showMobileCode ? "bg-green-500/20" : ""
               }`}
               aria-label="Show and copy session code"
@@ -864,7 +864,7 @@ export default function SessionHeader({ code }: { code: string }) {
             </p>
 
             {myItemsCount > 0 && (
-              <div className="rounded-lg border bg-muted/50 p-4 space-y-3">
+              <div className="rounded border bg-muted/50 p-4 space-y-3">
                 <div className="flex items-start space-x-3">
                   <Checkbox
                     id="delete-data"

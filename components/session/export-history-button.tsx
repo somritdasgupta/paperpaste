@@ -81,12 +81,12 @@ export default function ExportHistoryButton({
         <DropdownMenuTrigger asChild>
           <Button
             size="sm"
-            variant="outline"
+            variant="ghost"
             disabled={exporting}
-            className="h-8 gap-2"
+            className="h-5 px-1.5 gap-1 text-white hover:bg-white/20"
           >
-            <Download className="h-4 w-4" />
-            <span className="hidden sm:inline">Export</span>
+            <Download className="h-2.5 w-2.5" />
+            <span className="hidden sm:inline text-[10px]">Export</span>
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-48">

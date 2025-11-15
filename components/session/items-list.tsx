@@ -54,6 +54,7 @@ import { marked } from "marked";
 import DOMPurify from "dompurify";
 import LeavingCountdown from "./leaving-countdown";
 import ExportHistoryButton from "./export-history-button";
+import { useHistoryControls } from "./history-controls-context";
 
 type Item = {
   id: string;
@@ -90,8 +91,26 @@ type DeviceInfo = {
   device_name?: string;
 };
 
+// Export type for control bar props
+export type HistoryControlBarProps = {
+  connectionStatus: "connecting" | "connected" | "disconnected";
+  itemsCount: number;
+  exportEnabled: boolean;
+  canExport: boolean;
+  isHost: boolean;
+  sessionCode: string;
+  autoRefreshEnabled: boolean;
+  isRefreshing: boolean;
+  autoRefreshInterval: number;
+  onToggleAutoRefresh: () => void;
+  onManualRefresh: () => void;
+  onCycleTimeInterval: () => void;
+};
+
 export default function ItemsList({ code }: { code: string }) {
   const supabase = getSupabaseBrowserWithCode(code);
+  const controls = useHistoryControls();
+
   const [items, setItems] = useState<Item[]>([]);
   const [canView, setCanView] = useState(true);
   const [isFrozen, setIsFrozen] = useState(false);
@@ -146,6 +165,75 @@ export default function ItemsList({ code }: { code: string }) {
   useEffect(() => {
     generateSessionKey(code).then(setSessionKey);
   }, [code]);
+
+  // Publish state to context for control bar
+  useEffect(() => {
+    controls.setConnectionStatus(connectionStatus);
+    controls.setItemsCount(items.length);
+    controls.setExportEnabled(exportEnabled);
+    controls.setCanExport(canExport);
+    controls.setIsHost(isHost);
+    controls.setAutoRefreshEnabled(autoRefreshEnabled);
+    controls.setIsRefreshing(isRefreshing);
+    controls.setAutoRefreshInterval(autoRefreshInterval);
+  }, [
+    connectionStatus,
+    items.length,
+    exportEnabled,
+    canExport,
+    isHost,
+    autoRefreshEnabled,
+    isRefreshing,
+    autoRefreshInterval,
+    controls,
+  ]);
+
+  // Listen for control bar events
+  useEffect(() => {
+    const handleManualRefresh = () => {
+      fetchAndDecryptItems(true);
+    };
+
+    const handleToggleAutoRefresh = () => {
+      setAutoRefreshEnabled((prev) => !prev);
+    };
+
+    const handleCycleTimeInterval = () => {
+      setAutoRefreshInterval((prev) => {
+        const intervals = [3000, 5000, 10000, 15000, 30000, 60000];
+        const currentIndex = intervals.indexOf(prev);
+        const nextIndex = (currentIndex + 1) % intervals.length;
+        return intervals[nextIndex];
+      });
+    };
+
+    window.addEventListener("manual-refresh", handleManualRefresh);
+    window.addEventListener("toggle-auto-refresh", handleToggleAutoRefresh);
+    window.addEventListener("cycle-time-interval", handleCycleTimeInterval);
+
+    return () => {
+      window.removeEventListener("manual-refresh", handleManualRefresh);
+      window.removeEventListener(
+        "toggle-auto-refresh",
+        handleToggleAutoRefresh
+      );
+      window.removeEventListener(
+        "cycle-time-interval",
+        handleCycleTimeInterval
+      );
+    };
+  }, []);
+
+  // Auto-refresh timer - fetches data at specified interval when enabled
+  useEffect(() => {
+    if (!autoRefreshEnabled || !supabase || !sessionKey) return;
+
+    const refreshTimer = setInterval(() => {
+      fetchAndDecryptItems(true);
+    }, autoRefreshInterval);
+
+    return () => clearInterval(refreshTimer);
+  }, [autoRefreshEnabled, autoRefreshInterval, supabase, sessionKey]);
 
   // Extract data fetching logic for reuse
   const fetchAndDecryptItems = async (showLoading = false) => {
@@ -983,103 +1071,12 @@ export default function ItemsList({ code }: { code: string }) {
   };
 
   return (
-    <div className="w-full h-full flex flex-col relative">
+    <div className="w-full h-full flex flex-col">
       {/* Show overlay for hidden (full screen) or frozen (history only) */}
       {!canView && <MaskedOverlay variant="hidden" />}
 
-      {/* Clean minimal header */}
-      <div className="flex items-center justify-between p-4 border-b border-border/30 flex-none">
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2">
-            <div
-              className={`w-2 h-2 rounded-full transition-all duration-200 ${
-                connectionStatus === "connected"
-                  ? `bg-green-500 ${isRefreshing ? "animate-pulse" : ""}`
-                  : connectionStatus === "connecting"
-                    ? "bg-yellow-500 animate-pulse"
-                    : "bg-red-500"
-              }`}
-            />
-            <span className="text-sm font-medium text-foreground">
-              {items.length > 0
-                ? `${items.length} ${items.length === 1 ? "Item" : "Items"}`
-                : "No Items"}
-            </span>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-1.5 sm:gap-2">
-          {/* Export button - hidden on mobile to prevent clutter */}
-          {exportEnabled && canExport && items.length > 0 && (
-            <div className="hidden sm:block">
-              <ExportHistoryButton
-                sessionCode={code}
-                canExport={canExport}
-                isHost={isHost}
-              />
-            </div>
-          )}
-
-          <Button
-            size="sm"
-            variant="ghost"
-            onClick={toggleAutoRefresh}
-            className="h-8 w-8 p-0 hover:bg-muted/50 transition-colors"
-            title={
-              autoRefreshEnabled ? "Pause auto-refresh" : "Resume auto-refresh"
-            }
-          >
-            {autoRefreshEnabled ? (
-              <Pause className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-            ) : (
-              <Play className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-            )}
-          </Button>
-          <Button
-            size="sm"
-            variant="ghost"
-            onClick={handleManualRefresh}
-            disabled={isRefreshing}
-            className="h-8 w-8 p-0 hover:bg-muted/50 transition-colors"
-            title={`Refresh data${
-              autoRefreshEnabled ? " (Auto-refresh active)" : ""
-            }`}
-          >
-            <RefreshCw
-              className={`h-3.5 w-3.5 sm:h-4 sm:w-4 transition-all duration-200 ${
-                isRefreshing
-                  ? "animate-spin text-primary"
-                  : autoRefreshEnabled
-                    ? "text-primary"
-                    : ""
-              }`}
-            />
-          </Button>
-
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={cycleTimeInterval}
-            className="h-8 px-2 sm:px-2.5 text-xs font-medium hover:bg-muted/50 transition-all"
-            title="Click to cycle interval (3s → 5s → 10s → 15s → 30s → 60s)"
-          >
-            <Timer className="h-3.5 w-3.5 mr-0.5 sm:mr-1" />
-            <span className="hidden xs:inline">
-              {autoRefreshInterval >= 1000
-                ? `${autoRefreshInterval / 1000}s`
-                : `${autoRefreshInterval}ms`}
-            </span>
-            <span className="xs:hidden">
-              {autoRefreshInterval >= 1000
-                ? `${autoRefreshInterval / 1000}`
-                : autoRefreshInterval}
-            </span>
-          </Button>
-        </div>
-      </div>
-
       {/* Scrollable items area with frozen overlay */}
-      <div className="flex-1 overflow-auto relative">
+      <div className="flex-1 min-h-0 overflow-y-auto relative pb-2">
         {/* Frozen overlay only for this section */}
         {isFrozen && canView && <MaskedOverlay variant="frozen" />}
 
@@ -1088,8 +1085,8 @@ export default function ItemsList({ code }: { code: string }) {
             <div className="text-center space-y-4">
               {/* Animated empty state illustration */}
               <div className="relative mx-auto w-32 h-32 mb-2">
-                <div className="absolute inset-0 bg-primary/5 rounded-2xl animate-pulse"></div>
-                <div className="absolute inset-2 bg-primary/10 rounded-xl"></div>
+                <div className="absolute inset-0 bg-primary/5 rounded animate-pulse"></div>
+                <div className="absolute inset-2 bg-primary/10 rounded"></div>
                 <div className="absolute inset-0 flex items-center justify-center">
                   <svg
                     className="w-16 h-16 text-primary/30"
@@ -1137,7 +1134,7 @@ export default function ItemsList({ code }: { code: string }) {
             </div>
           </div>
         ) : (
-          <div className="space-y-0.5 p-1.5 sm:p-2 font-mono text-xs">
+          <div className="space-y-0.5 p-1.5 sm:p-2 font-mono text-xs pt-1">
             {items.map((item) => {
               const isExpanded = expandedItems.has(item.id);
               const isLongContent = item.content && item.content.length > 200;
@@ -1163,13 +1160,13 @@ export default function ItemsList({ code }: { code: string }) {
                 >
                   {/* Shimmer effect during refresh */}
                   {isRefreshing && (
-                    <div className="absolute inset-0 z-10 bg-gradient-to-r from-transparent via-white/20 to-transparent dark:via-white/5 animate-shimmer pointer-events-none rounded" />
+                    <div className="absolute inset-0 z-10 bg-linear-to-r from-transparent via-white/20 to-transparent dark:via-white/5 animate-shimmer pointer-events-none rounded" />
                   )}
 
                   {/* LOG ENTRY - Single compact line */}
                   <div className="flex items-start gap-2 px-2 py-1.5">
                     {/* Timestamp - Terminal style */}
-                    <div className="flex-shrink-0 text-[10px] text-muted-foreground/70 font-mono mt-0.5">
+                    <div className="shrink-0 text-[10px] text-muted-foreground/70 font-mono mt-0.5">
                       {item.display_created_at ? (
                         <span>
                           {new Date(item.display_created_at).toLocaleTimeString(
@@ -1189,7 +1186,7 @@ export default function ItemsList({ code }: { code: string }) {
 
                     {/* Type indicator - Single char */}
                     <div
-                      className={`flex-shrink-0 font-bold ${typeColors[item.kind]} mt-0.5`}
+                      className={`shrink-0 font-bold ${typeColors[item.kind]} mt-0.5`}
                     >
                       {item.kind === "text"
                         ? "T"
@@ -1199,7 +1196,7 @@ export default function ItemsList({ code }: { code: string }) {
                     </div>
 
                     {/* Device - Compact */}
-                    <div className="flex-shrink-0 text-[10px] text-muted-foreground/70 min-w-[60px] max-w-[80px] truncate mt-0.5">
+                    <div className="shrink-0 text-[10px] text-muted-foreground/70 min-w-[60px] max-w-20 truncate mt-0.5">
                       {item.device_name || "unknown"}
                       {isOwnDevice && (
                         <span className="text-primary ml-1">*</span>
@@ -1229,7 +1226,7 @@ export default function ItemsList({ code }: { code: string }) {
                     </div>
 
                     {/* Action buttons - Hover visible */}
-                    <div className="flex items-center gap-0.5 flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <div className="flex items-center gap-0.5 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
                       {item.kind === "file" ? (
                         <>
                           <FilePreview
@@ -1320,7 +1317,7 @@ export default function ItemsList({ code }: { code: string }) {
                     <div className="px-2 pb-2 pl-[120px]">
                       <div className="border-t border-border/40 pt-1.5">
                         {item.kind === "code" ? (
-                          <pre className="p-2 rounded bg-muted/30 text-[10px] font-mono text-foreground whitespace-pre-wrap break-words max-h-60 overflow-y-auto">
+                          <pre className="p-2 rounded bg-muted/30 text-[10px] font-mono text-foreground whitespace-pre-wrap wrap-break-word max-h-60 overflow-y-auto">
                             {item.content}
                           </pre>
                         ) : shouldRenderAsMarkdown(item.content || "") ? (
@@ -1331,7 +1328,7 @@ export default function ItemsList({ code }: { code: string }) {
                             }}
                           />
                         ) : (
-                          <div className="p-2 rounded bg-muted/30 text-[10px] text-foreground whitespace-pre-wrap break-words max-h-60 overflow-y-auto">
+                          <div className="p-2 rounded bg-muted/30 text-[10px] text-foreground whitespace-pre-wrap wrap-break-word max-h-60 overflow-y-auto">
                             {item.content}
                           </div>
                         )}
@@ -1377,14 +1374,14 @@ export default function ItemsList({ code }: { code: string }) {
 
       {/* Session Killed Dialog - Full Screen Overlay */}
       {sessionKilledOpen && (
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-300 min-h-screen">
+        <div className="fixed inset-0 z-9999 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-300 min-h-screen">
           <div className="relative max-w-md w-full">
-            <div className="relative bg-card backdrop-blur-xl border-2 border-destructive/50 shadow-2xl rounded-2xl p-6 sm:p-8 text-center overflow-hidden animate-in zoom-in-95 duration-500">
-              <div className="absolute inset-0 rounded-2xl bg-gradient-to-r from-destructive/10 via-destructive/5 to-destructive/10 blur-xl"></div>
-              <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-destructive via-destructive/80 to-destructive"></div>
+            <div className="relative bg-card backdrop-blur-xl border-2 border-destructive/50 shadow-2xl rounded p-6 sm:p-8 text-center overflow-hidden animate-in zoom-in-95 duration-500">
+              <div className="absolute inset-0 rounded bg-linear-to-r from-destructive/10 via-destructive/5 to-destructive/10 blur-xl"></div>
+              <div className="absolute top-0 left-0 right-0 h-1 bg-linear-to-r from-destructive via-destructive/80 to-destructive"></div>
 
               <div className="relative z-10">
-                <div className="mx-auto mb-4 sm:mb-6 w-16 h-16 sm:w-20 sm:h-20 rounded-xl sm:rounded-2xl bg-gradient-to-br from-destructive/80 to-destructive flex items-center justify-center shadow-lg">
+                <div className="mx-auto mb-4 sm:mb-6 w-16 h-16 sm:w-20 sm:h-20 rounded sm:rounded bg-linear-to-br from-destructive/80 to-destructive flex items-center justify-center shadow-lg">
                   <Trash2
                     className="h-8 w-8 sm:h-10 sm:w-10 text-destructive-foreground"
                     strokeWidth={2.5}
@@ -1400,7 +1397,7 @@ export default function ItemsList({ code }: { code: string }) {
                 </p>
 
                 <div className="my-6 sm:my-8">
-                  <div className="inline-flex items-center justify-center w-20 h-20 sm:w-24 sm:h-24 rounded-full bg-gradient-to-br from-destructive to-destructive/80 shadow-xl shadow-destructive/30 animate-pulse">
+                  <div className="inline-flex items-center justify-center w-20 h-20 sm:w-24 sm:h-24 rounded-full bg-linear-to-br from-destructive to-destructive/80 shadow-xl shadow-destructive/30 animate-pulse">
                     <span className="text-4xl sm:text-5xl font-bold text-destructive-foreground">
                       {killCountdown}
                     </span>

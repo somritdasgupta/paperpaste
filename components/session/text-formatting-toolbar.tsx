@@ -57,7 +57,7 @@ export default function TextFormattingToolbar({
   ];
 
   return (
-    <div className="flex items-center gap-1 p-2 bg-muted/30 rounded-lg border border-border">
+    <div className="flex items-center gap-1 p-2 bg-muted/30 rounded border border-border">
       <TooltipProvider>
         {formatButtons.map(({ icon: Icon, format, tooltip, wrapper }) => (
           <Tooltip key={format}>

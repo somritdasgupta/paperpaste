@@ -45,9 +45,15 @@ import {
   WrapText,
   Languages,
   Sparkles,
+  RefreshCw,
+  Pause,
+  Play,
+  Timer,
 } from "lucide-react";
 import MaskedOverlay from "@/components/ui/masked-overlay";
 import { triggerGlobalRefresh } from "@/lib/globalRefresh";
+import { useHistoryControls } from "./history-controls-context";
+import ExportHistoryButton from "./export-history-button";
 import LeavingCountdown from "./leaving-countdown";
 import TextFormattingToolbar from "./text-formatting-toolbar";
 import CodeFormattingToolbar from "./code-formatting-toolbar";
@@ -243,6 +249,104 @@ const detectLanguage = (code: string): string => {
   // Default
   return "javascript";
 };
+
+// History Control Bar Component
+function HistoryControlBar() {
+  const controls = useHistoryControls();
+
+  const getConnectionStatusColor = () => {
+    switch (controls.connectionStatus) {
+      case "connected":
+        return "bg-green-300";
+      case "connecting":
+        return "bg-yellow-300";
+      case "disconnected":
+        return "bg-red-300";
+      default:
+        return "bg-gray-300";
+    }
+  };
+
+  const formatTimeInterval = (ms: number) => {
+    if (ms >= 60000) return `${ms / 60000}m`;
+    if (ms >= 1000) return `${ms / 1000}s`;
+    return `${ms}ms`;
+  };
+
+  return (
+    <div className="bg-primary border-t border-primary/20 backdrop-blur-md shadow-lg flex items-center justify-between px-3 py-0.5">
+      <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5">
+          <div
+            className={`w-1.5 h-1.5 rounded-full ${getConnectionStatusColor()}`}
+          />
+          <span className="text-[10px] font-medium text-white">
+            {controls.itemsCount} {controls.itemsCount === 1 ? "item" : "items"}
+          </span>
+        </div>
+      </div>
+      <div className="flex items-center gap-1">
+        {/* Export Button */}
+        {controls.exportEnabled && controls.canExport && controls.isHost && (
+          <ExportHistoryButton
+            sessionCode={controls.sessionCode}
+            canExport={controls.canExport}
+            isHost={controls.isHost}
+          />
+        )}
+
+        {/* Pause/Play Button */}
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={controls.toggleAutoRefresh}
+          className="h-5 w-5 p-0 text-white hover:bg-white/20 rounded"
+          title={
+            controls.autoRefreshEnabled
+              ? "Pause auto-refresh"
+              : "Resume auto-refresh"
+          }
+        >
+          {controls.autoRefreshEnabled ? (
+            <Pause className="h-2.5 w-2.5" />
+          ) : (
+            <Play className="h-2.5 w-2.5" />
+          )}
+        </Button>
+
+        {/* Manual Refresh Button */}
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={controls.handleManualRefresh}
+          disabled={controls.isRefreshing}
+          className={`h-5 w-5 p-0 rounded ${
+            controls.isRefreshing
+              ? "text-blue-300 animate-spin"
+              : "text-white hover:bg-white/20"
+          }`}
+          title="Manual refresh"
+        >
+          <RefreshCw className="h-2.5 w-2.5" />
+        </Button>
+
+        {/* Timer Interval Button */}
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={controls.cycleTimeInterval}
+          className="h-5 px-1.5 gap-1 text-white hover:bg-white/20 rounded"
+          title="Change refresh interval"
+        >
+          <Timer className="h-2.5 w-2.5" />
+          <span className="text-[10px] font-medium">
+            {formatTimeInterval(controls.autoRefreshInterval)}
+          </span>
+        </Button>
+      </div>
+    </div>
+  );
+}
 
 export default function ClipboardInput({ code }: { code: string }) {
   const [type, setType] = useState<ItemType>("text");
@@ -1080,62 +1184,77 @@ export default function ClipboardInput({ code }: { code: string }) {
         />
       )}
 
+      {/* History Control Bar - Above input panel */}
+      <HistoryControlBar />
+
       <div
         className={`
-          bg-background border-t shadow-2xl
-          transition-all duration-300 ease-out
+          bg-gradient-to-b from-background/95 to-background border-t border-primary/10 shadow-2xl
+          transition-all duration-300 ease-out backdrop-blur-xl
           ${isFocused ? "h-[70vh]" : "h-auto"}
         `}
       >
         <form onSubmit={submit} className="h-full flex flex-col">
           {/* Single Row: Fixed Tabs (Left) + Scrollable Formatting (Right) */}
-          <div className="flex-shrink-0 px-2 py-1.5 border-b bg-muted/30 flex items-center gap-2">
+          <div className="shrink-0 px-3 py-2 border-b border-primary/10 bg-gradient-to-r from-primary/5 via-primary/3 to-transparent flex items-center gap-3">
             {/* Left: Fixed Tab Buttons */}
-            <div className="flex items-center gap-1.5 flex-shrink-0">
+            <div className="flex items-center gap-2 shrink-0">
               <Button
                 type="button"
-                variant={type === "text" ? "default" : "ghost"}
+                variant="ghost"
                 disabled={!canView}
                 onClick={() => setType("text")}
                 size="sm"
-                className="h-7 px-2.5 text-[11px] font-medium rounded-full"
+                className={`h-8 px-3 text-xs font-semibold rounded transition-all duration-200 ${
+                  type === "text"
+                    ? "bg-primary text-primary-foreground shadow-lg shadow-primary/25 scale-105"
+                    : "hover:bg-primary/10 hover:scale-105"
+                }`}
               >
-                <Type className="h-3 w-3 mr-1" />
+                <Type className="h-3.5 w-3.5 mr-1.5" />
                 Text
               </Button>
               <Button
                 type="button"
-                variant={type === "code" ? "default" : "ghost"}
+                variant="ghost"
                 disabled={!canView}
                 onClick={() => setType("code")}
                 size="sm"
-                className="h-7 px-2.5 text-[11px] font-medium rounded-full"
+                className={`h-8 px-3 text-xs font-semibold rounded transition-all duration-200 ${
+                  type === "code"
+                    ? "bg-primary text-primary-foreground shadow-lg shadow-primary/25 scale-105"
+                    : "hover:bg-primary/10 hover:scale-105"
+                }`}
               >
-                <Code className="h-3 w-3 mr-1" />
+                <Code className="h-3.5 w-3.5 mr-1.5" />
                 Code
               </Button>
               <Button
                 type="button"
-                variant={type === "file" ? "default" : "ghost"}
+                variant="ghost"
                 disabled={!canView}
                 onClick={() => setType("file")}
                 size="sm"
-                className="h-7 px-2.5 text-[11px] font-medium rounded-full"
+                className={`h-8 px-3 text-xs font-semibold rounded transition-all duration-200 ${
+                  type === "file"
+                    ? "bg-primary text-primary-foreground shadow-lg shadow-primary/25 scale-105"
+                    : "hover:bg-primary/10 hover:scale-105"
+                }`}
               >
-                <Upload className="h-3 w-3 mr-1" />
+                <Upload className="h-3.5 w-3.5 mr-1.5" />
                 File
               </Button>
             </div>
 
             {/* Separator */}
             {type !== "file" && isFocused && (
-              <div className="w-px h-5 bg-border flex-shrink-0" />
+              <div className="w-px h-6 bg-gradient-to-b from-transparent via-primary/20 to-transparent shrink-0" />
             )}
 
             {/* Right: Scrollable Formatting Toolbar */}
             {type !== "file" && isFocused && (
               <div className="flex-1 overflow-x-auto scrollbar-none">
-                <div className="flex items-center gap-1 min-w-max">
+                <div className="flex items-center gap-1.5 min-w-max">
                   {type === "text" ? (
                     <>
                       <Button
@@ -1144,7 +1263,7 @@ export default function ClipboardInput({ code }: { code: string }) {
                         size="sm"
                         disabled={!canView}
                         onClick={() => handleTextFormat("bold")}
-                        className="h-6 w-6 p-0 rounded-full flex-shrink-0"
+                        className="h-7 w-7 p-0 rounded shrink-0 hover:bg-primary/15 hover:scale-110 transition-all"
                         title="Bold (Ctrl+B)"
                       >
                         <Bold className="h-3.5 w-3.5" />
@@ -1155,7 +1274,7 @@ export default function ClipboardInput({ code }: { code: string }) {
                         size="sm"
                         disabled={!canView}
                         onClick={() => handleTextFormat("italic")}
-                        className="h-6 w-6 p-0 rounded-full flex-shrink-0"
+                        className="h-7 w-7 p-0 rounded shrink-0 hover:bg-primary/15 hover:scale-110 transition-all"
                         title="Italic (Ctrl+I)"
                       >
                         <Italic className="h-3.5 w-3.5" />
@@ -1166,7 +1285,7 @@ export default function ClipboardInput({ code }: { code: string }) {
                         size="sm"
                         disabled={!canView}
                         onClick={() => handleTextFormat("underline")}
-                        className="h-6 w-6 p-0 rounded-full flex-shrink-0"
+                        className="h-7 w-7 p-0 rounded shrink-0 hover:bg-primary/15 hover:scale-110 transition-all"
                         title="Underline"
                       >
                         <Underline className="h-3.5 w-3.5" />
@@ -1177,7 +1296,7 @@ export default function ClipboardInput({ code }: { code: string }) {
                         size="sm"
                         disabled={!canView}
                         onClick={() => handleTextFormat("strikethrough")}
-                        className="h-6 w-6 p-0 rounded-full flex-shrink-0"
+                        className="h-7 w-7 p-0 rounded shrink-0 hover:bg-primary/15 hover:scale-110 transition-all"
                         title="Strikethrough"
                       >
                         <Strikethrough className="h-3.5 w-3.5" />
@@ -1188,19 +1307,19 @@ export default function ClipboardInput({ code }: { code: string }) {
                         size="sm"
                         disabled={!canView}
                         onClick={() => handleTextFormat("monospace")}
-                        className="h-6 w-6 p-0 rounded-full flex-shrink-0"
+                        className="h-7 w-7 p-0 rounded shrink-0 hover:bg-primary/15 hover:scale-110 transition-all"
                         title="Monospace"
                       >
                         <MonitorDot className="h-3.5 w-3.5" />
                       </Button>
-                      <div className="w-px h-4 bg-border mx-0.5 flex-shrink-0" />
+                      <div className="w-px h-5 bg-linear-to-b from-transparent via-primary/20 to-transparent mx-1 shrink-0" />
                       <Button
                         type="button"
                         variant="ghost"
                         size="sm"
                         disabled={!canView}
                         onClick={() => handleTextFormat("h1")}
-                        className="h-6 w-6 p-0 rounded-full flex-shrink-0"
+                        className="h-7 w-7 p-0 rounded shrink-0 hover:bg-primary/15 hover:scale-110 transition-all"
                         title="Heading 1"
                       >
                         <Heading1 className="h-3.5 w-3.5" />
@@ -1211,7 +1330,7 @@ export default function ClipboardInput({ code }: { code: string }) {
                         size="sm"
                         disabled={!canView}
                         onClick={() => handleTextFormat("h2")}
-                        className="h-6 w-6 p-0 rounded-full flex-shrink-0"
+                        className="h-7 w-7 p-0 rounded shrink-0 hover:bg-primary/15 hover:scale-110 transition-all"
                         title="Heading 2"
                       >
                         <Heading2 className="h-3.5 w-3.5" />
@@ -1222,7 +1341,7 @@ export default function ClipboardInput({ code }: { code: string }) {
                         size="sm"
                         disabled={!canView}
                         onClick={() => handleTextFormat("h3")}
-                        className="h-6 w-6 p-0 rounded-full flex-shrink-0"
+                        className="h-7 w-7 p-0 rounded shrink-0 hover:bg-primary/15 hover:scale-110 transition-all"
                         title="Heading 3"
                       >
                         <Heading3 className="h-3.5 w-3.5" />
@@ -1236,7 +1355,7 @@ export default function ClipboardInput({ code }: { code: string }) {
                         size="sm"
                         disabled={!canView}
                         onClick={() => handleCodeFormat("comment")}
-                        className="h-6 w-6 p-0 rounded-full flex-shrink-0"
+                        className="h-7 w-7 p-0 rounded shrink-0 hover:bg-primary/15 hover:scale-110 transition-all"
                         title="Comment (Ctrl+/)"
                       >
                         <Hash className="h-3.5 w-3.5" />
@@ -1247,7 +1366,7 @@ export default function ClipboardInput({ code }: { code: string }) {
                         size="sm"
                         disabled={!canView}
                         onClick={() => handleCodeFormat("indent")}
-                        className="h-6 w-6 p-0 rounded-full flex-shrink-0"
+                        className="h-7 w-7 p-0 rounded shrink-0 hover:bg-primary/15 hover:scale-110 transition-all"
                         title="Indent (Tab)"
                       >
                         <Indent className="h-3.5 w-3.5" />
@@ -1258,19 +1377,19 @@ export default function ClipboardInput({ code }: { code: string }) {
                         size="sm"
                         disabled={!canView}
                         onClick={() => handleCodeFormat("outdent")}
-                        className="h-6 w-6 p-0 rounded-full flex-shrink-0"
+                        className="h-7 w-7 p-0 rounded shrink-0 hover:bg-primary/15 hover:scale-110 transition-all"
                         title="Outdent (Shift+Tab)"
                       >
                         <Outdent className="h-3.5 w-3.5" />
                       </Button>
-                      <div className="w-px h-4 bg-border mx-0.5 flex-shrink-0" />
+                      <div className="w-px h-5 bg-linear-to-b from-transparent via-primary/20 to-transparent mx-1 shrink-0" />
                       <Button
                         type="button"
                         variant="ghost"
                         size="sm"
                         disabled={!canView}
                         onClick={() => handleCodeFormat("braces")}
-                        className="h-6 w-6 p-0 rounded-full flex-shrink-0"
+                        className="h-7 w-7 p-0 rounded shrink-0 hover:bg-primary/15 hover:scale-110 transition-all"
                         title="Check Braces"
                       >
                         <Braces className="h-3.5 w-3.5" />
@@ -1281,7 +1400,7 @@ export default function ClipboardInput({ code }: { code: string }) {
                         size="sm"
                         disabled={!canView}
                         onClick={() => handleCodeFormat("prettify")}
-                        className="h-6 w-6 p-0 rounded-full flex-shrink-0"
+                        className="h-7 w-7 p-0 rounded shrink-0 hover:bg-primary/15 hover:scale-110 transition-all"
                         title="Prettify (Format with Prettier)"
                       >
                         <Sparkles className="h-3.5 w-3.5" />
@@ -1292,7 +1411,7 @@ export default function ClipboardInput({ code }: { code: string }) {
                         size="sm"
                         disabled={!canView}
                         onClick={() => handleCodeFormat("minify")}
-                        className="h-6 w-6 p-0 rounded-full flex-shrink-0"
+                        className="h-7 w-7 p-0 rounded shrink-0 hover:bg-primary/15 hover:scale-110 transition-all"
                         title="Minify (Remove Whitespace)"
                       >
                         <Minimize2 className="h-3.5 w-3.5" />
@@ -1303,7 +1422,7 @@ export default function ClipboardInput({ code }: { code: string }) {
                         size="sm"
                         disabled={!canView}
                         onClick={() => handleCodeFormat("wrap")}
-                        className="h-6 w-6 p-0 rounded-full flex-shrink-0"
+                        className="h-7 w-7 p-0 rounded shrink-0 hover:bg-primary/15 hover:scale-110 transition-all"
                         title="Wrap Long Lines"
                       >
                         <WrapText className="h-3.5 w-3.5" />
@@ -1314,7 +1433,7 @@ export default function ClipboardInput({ code }: { code: string }) {
                         size="sm"
                         disabled={!canView}
                         onClick={() => handleCodeFormat("uppercase")}
-                        className="h-6 w-6 p-0 rounded-full flex-shrink-0"
+                        className="h-7 w-7 p-0 rounded shrink-0 hover:bg-primary/15 hover:scale-110 transition-all"
                         title="UPPERCASE"
                       >
                         <span className="text-[10px] font-bold">AA</span>
@@ -1325,7 +1444,7 @@ export default function ClipboardInput({ code }: { code: string }) {
                         size="sm"
                         disabled={!canView}
                         onClick={() => handleCodeFormat("lowercase")}
-                        className="h-6 w-6 p-0 rounded-full flex-shrink-0"
+                        className="h-7 w-7 p-0 rounded shrink-0 hover:bg-primary/15 hover:scale-110 transition-all"
                         title="lowercase"
                       >
                         <span className="text-[10px] font-bold">aa</span>
@@ -1343,9 +1462,9 @@ export default function ClipboardInput({ code }: { code: string }) {
             {type === "code" && codeContent.trim() && !isFocused && (
               <Badge
                 variant="outline"
-                className="h-5 px-2 text-[10px] font-mono flex-shrink-0"
+                className="h-6 px-3 text-[10px] font-mono shrink-0 bg-primary/5 border-primary/20 backdrop-blur-sm rounded"
               >
-                <Languages className="h-2.5 w-2.5 mr-1" />
+                <Languages className="h-3 w-3 mr-1.5" />
                 {detectedLang}
               </Badge>
             )}
@@ -1359,7 +1478,7 @@ export default function ClipboardInput({ code }: { code: string }) {
                   htmlFor="file-upload"
                   className={`
                     w-full max-w-md flex flex-col items-center justify-center
-                    min-h-[180px] p-6 rounded-xl border-2 border-dashed
+                    min-h-[180px] p-6 rounded border-2 border-dashed
                     cursor-pointer transition-all duration-200
                     ${
                       fileError
@@ -1419,7 +1538,7 @@ export default function ClipboardInput({ code }: { code: string }) {
                   )}
                 </label>
                 {fileError && (
-                  <div className="absolute bottom-20 left-4 right-4 text-xs text-destructive bg-destructive/10 p-3 rounded-lg flex items-start gap-2 border border-destructive/20">
+                  <div className="absolute bottom-20 left-4 right-4 text-xs text-destructive bg-destructive/10 p-3 rounded flex items-start gap-2 border border-destructive/20">
                     <Shield className="h-4 w-4 flex-shrink-0 mt-0.5" />
                     <span>{fileError}</span>
                   </div>
@@ -1519,10 +1638,15 @@ export default function ClipboardInput({ code }: { code: string }) {
 
           {/* Footer - Only for file type */}
           {type === "file" && (
-            <div className="flex-shrink-0 px-4 py-3 border-t bg-muted/20 flex items-center justify-between gap-3">
+            <div className="shrink-0 px-4 py-3 border-t border-primary/10 bg-gradient-to-r from-primary/5 to-transparent backdrop-blur-sm flex items-center justify-between gap-3">
               <div className="flex items-center gap-2 text-xs text-muted-foreground">
                 {file && !fileError && (
-                  <span className="font-medium text-primary">File ready</span>
+                  <div className="flex items-center gap-2 px-3 py-1.5 rounded bg-primary/10 backdrop-blur-sm">
+                    <div className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
+                    <span className="font-semibold text-primary">
+                      File ready
+                    </span>
+                  </div>
                 )}
               </div>
 
@@ -1536,7 +1660,7 @@ export default function ClipboardInput({ code }: { code: string }) {
                       setFile(null);
                       setFileError(null);
                     }}
-                    className="h-9 px-4 rounded-full text-xs"
+                    className="h-9 px-4 rounded text-xs font-medium hover:bg-destructive/10 hover:text-destructive transition-all"
                   >
                     Clear
                   </Button>
@@ -1547,7 +1671,7 @@ export default function ClipboardInput({ code }: { code: string }) {
                     busy || !canView || !sessionKey || !file || !!fileError
                   }
                   size="sm"
-                  className="h-9 px-6 rounded-full text-xs font-medium shadow-lg"
+                  className="h-9 px-6 rounded text-xs font-semibold shadow-lg shadow-primary/25 hover:scale-105 transition-all"
                 >
                   {busy ? (
                     <>
@@ -1567,7 +1691,7 @@ export default function ClipboardInput({ code }: { code: string }) {
 
           {/* Activity Log - Overlay */}
           {showActivityLog && activityLog.length > 0 && (
-            <div className="absolute bottom-16 left-4 right-4 border rounded-lg p-3 bg-background/95 backdrop-blur-xl shadow-xl">
+            <div className="absolute bottom-16 left-4 right-4 border rounded p-3 bg-background/95 backdrop-blur-xl shadow-xl">
               <div className="flex items-center justify-between mb-2">
                 <div className="flex items-center gap-2">
                   <div className="w-2 h-2 rounded-full bg-primary animate-pulse" />

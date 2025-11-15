@@ -33,7 +33,7 @@ export default function SessionErrorPage({ error, reset }: ErrorPageProps) {
       <div className="w-full max-w-md">
         <Card className="border-destructive/20">
           <CardHeader className="text-center space-y-4">
-            <div className="mx-auto w-16 h-16 bg-destructive/10 rounded-xl border border-destructive/20 flex items-center justify-center">
+            <div className="mx-auto w-16 h-16 bg-destructive/10 rounded border border-destructive/20 flex items-center justify-center">
               <AlertTriangle className="h-8 w-8 text-destructive" />
             </div>
             <div>
@@ -70,7 +70,7 @@ export default function SessionErrorPage({ error, reset }: ErrorPageProps) {
               </Button>
             </div>
             {process.env.NODE_ENV === "development" && (
-              <details className="mt-4 p-3 bg-muted rounded-md text-xs">
+              <details className="mt-4 p-3 bg-muted rounded text-xs">
                 <summary className="cursor-pointer font-medium">
                   Error Details (Dev)
                 </summary>

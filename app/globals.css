@@ -347,7 +347,7 @@
   }
 
   .animated-border-card::before {
-    content: '';
+    content: "";
     position: absolute;
     inset: -2px;
     border-radius: inherit;
@@ -360,9 +360,13 @@
       hsl(var(--primary) / 0.8) 90%,
       transparent 100%
     );
-    -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    -webkit-mask:
+      linear-gradient(#fff 0 0) content-box,
+      linear-gradient(#fff 0 0);
     -webkit-mask-composite: xor;
-    mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    mask:
+      linear-gradient(#fff 0 0) content-box,
+      linear-gradient(#fff 0 0);
     mask-composite: exclude;
     animation: border-trail 3s linear infinite;
     pointer-events: none;

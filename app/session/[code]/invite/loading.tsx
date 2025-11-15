@@ -8,8 +8,8 @@ export default function InviteLoadingPage() {
         <Card className="border-primary/20">
           <CardContent className="p-8">
             <div className="flex flex-col items-center space-y-6">
-              <div className="w-16 h-16 bg-primary/10 rounded-xl border border-primary/20 flex items-center justify-center">
-                <div className="w-8 h-8 bg-primary rounded-md animate-pulse" />
+              <div className="w-16 h-16 bg-primary/10 rounded border border-primary/20 flex items-center justify-center">
+                <div className="w-8 h-8 bg-primary rounded animate-pulse" />
               </div>
               <div className="text-center space-y-2">
                 <div className="flex items-center justify-center space-x-2">

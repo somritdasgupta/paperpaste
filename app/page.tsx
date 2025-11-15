@@ -79,7 +79,7 @@ export default function HomePage() {
   };
 
   return (
-    <main className="relative min-h-screen w-full bg-linear-to-br from-background via-background to-muted/30 flex items-center justify-center py-8">
+    <main className="relative min-h-screen w-full bg-linear-to-br from-background via-background to-muted/30 flex items-center justify-center">
       {/* Background Graphics */}
       <div className="fixed inset-0 pointer-events-none overflow-hidden z-0">
         {/* Gradient orbs */}

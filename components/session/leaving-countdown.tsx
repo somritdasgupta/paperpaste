@@ -34,7 +34,7 @@ export default function LeavingCountdown({
   return (
     <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-background backdrop-blur-md animate-in fade-in duration-200 min-h-screen">
       <div className="w-full max-w-sm">
-        <div className="bg-card border border-border rounded-lg p-8 text-center space-y-6 animate-in zoom-in-95 duration-300">
+        <div className="bg-card border border-border rounded p-8 text-center space-y-6 animate-in zoom-in-95 duration-300">
           {/* Icon */}
           <div className="mx-auto w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center">
             <LogOut className="h-6 w-6 text-primary" strokeWidth={2} />

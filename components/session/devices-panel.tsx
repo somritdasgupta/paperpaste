@@ -44,6 +44,9 @@ import {
   Info,
   Copy,
   Check,
+  Loader2,
+  Download,
+  Ban,
 } from "lucide-react";
 import MaskedOverlay from "@/components/ui/masked-overlay";
 
@@ -522,7 +525,7 @@ export default function DevicesPanel({ code }: { code: string }) {
   if (!supabase) return null;
 
   return (
-    <div className="relative">
+    <div className="w-full h-full flex flex-col">
       {/* Determine local device state and show global overlay/badge when
           current device is frozen or hidden. This keeps UI consistent with
           other components (dim + badge). */}
@@ -531,39 +534,29 @@ export default function DevicesPanel({ code }: { code: string }) {
         // Only show the full-panel overlay when the local device is hidden (can_view === false).
         // If the device is frozen, we keep per-device frozen badges but do not block the devices panel UI.
         if (local && local.can_view === false) {
-          return (
-            <>
-              <div className="absolute left-4 top-4 z-50">
-                <div
-                  className={`text-xs px-2 py-1 rounded-full font-medium flex items-center gap-2 bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300`}
-                >
-                  <EyeOff className="h-3 w-3" />
-                  <span>View hidden</span>
-                </div>
-              </div>
-              <MaskedOverlay variant="hidden" />
-            </>
-          );
+          return <MaskedOverlay variant="hidden" />;
         }
         return null;
       })()}
-      {redirectCountdown !== null && (
-        <div className="mb-3 text-sm text-destructive bg-destructive/10 border border-destructive/20 rounded-md p-3 text-center">
-          <div className="font-medium">{redirectReason}</div>
-          <div className="text-xs mt-1">
-            Redirecting to home in {redirectCountdown} seconds...
+
+      {/* Scrollable devices area */}
+      <div className="flex-1 overflow-y-auto relative">
+        {redirectCountdown !== null && (
+          <div className="m-2 text-sm text-destructive bg-destructive/10 border border-destructive/20 rounded p-3 text-center">
+            <div className="font-medium">{redirectReason}</div>
+            <div className="text-xs mt-1">
+              Redirecting to home in {redirectCountdown} seconds...
+            </div>
           </div>
-        </div>
-      )}
+        )}
 
-      {error && (
-        <div className="mb-3 text-sm text-destructive bg-destructive/10 border border-destructive/20 rounded-md p-2">
-          {error}
-        </div>
-      )}
+        {error && (
+          <div className="m-2 text-sm text-destructive bg-destructive/10 border border-destructive/20 rounded p-2">
+            {error}
+          </div>
+        )}
 
-      <div className="relative">
-        <ul className="flex flex-col gap-3">
+        <ul className="flex flex-col gap-0.5 font-mono text-xs">
           {devices.map((d) => {
             const timeSinceLastSeen =
               new Date().getTime() - new Date(d.last_seen).getTime();
@@ -573,242 +566,355 @@ export default function DevicesPanel({ code }: { code: string }) {
             return (
               <li
                 key={d.id}
-                className="bg-card border rounded-xl p-2 sm:p-4 hover:shadow-md transition-all duration-200"
+                className="bg-linear-to-br from-card via-card/95 to-card/90 border border-primary/10 rounded overflow-hidden transition-all duration-300 hover:border-primary/20 hover:shadow-lg hover:shadow-primary/5"
               >
-                {/* Main Device Info Row */}
-                <div className="flex items-center justify-between gap-3">
-                  <div className="flex items-center gap-3 flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <div
-                        className={`w-3 h-3 rounded-full ${
-                          isOnline
-                            ? "bg-green-500 animate-pulse"
-                            : "bg-gray-400"
-                        }`}
-                        title={isOnline ? "Online" : "Offline"}
-                      />
-                      {getDeviceIcon(d.device_name || "")}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="text-sm font-semibold truncate">
-                          {d.device_name || `Device ${d.device_id.slice(0, 8)}`}
-                        </span>
-                        <div className="flex items-center gap-1 flex-wrap">
+                {/* Main Device Card */}
+                <div className="p-3 space-y-2.5">
+                  {/* Top Row: Device Info + Actions + Expand Button */}
+                  <div className="flex items-center gap-3">
+                    {/* Device Identity */}
+                    <div className="flex items-center gap-2.5 flex-1 min-w-0">
+                      {/* Status Indicator + Icon */}
+                      <div className="relative shrink-0">
+                        <div className="relative">
+                          <div className="text-primary">
+                            {getDeviceIcon(d.device_name || "")}
+                          </div>
+                          {/* Status Badge Overlay */}
+                          <div
+                            className={`absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full border-2 border-card ${
+                              isOnline
+                                ? "bg-green-400 shadow-lg shadow-green-400/50"
+                                : "bg-gray-400"
+                            }`}
+                            title={isOnline ? "Online" : "Offline"}
+                          />
+                        </div>
+                      </div>
+
+                      {/* Device Name & Status */}
+                      <div className="flex-1 min-w-0 space-y-1">
+                        <h4 className="font-semibold text-sm text-foreground truncate">
+                          {d.device_name || `Device-${d.device_id.slice(0, 6)}`}
+                        </h4>
+
+                        {/* Badges Row */}
+                        <div className="flex items-center gap-1.5 flex-wrap">
                           {d.device_id === selfId && (
-                            <span className="bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300 text-xs px-2 py-0.5 rounded-full font-medium flex items-center gap-1">
-                              <UserCheck className="h-3 w-3" />
+                            <span className="bg-blue-500/15 text-blue-400 px-2 py-0.5 rounded text-[9px] font-semibold border border-blue-500/20">
+                              YOU
                             </span>
                           )}
                           {d.is_host && (
-                            <span className="bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-300 text-xs px-2 py-0.5 rounded-full font-medium flex items-center gap-1">
-                              <Crown className="h-3 w-3" />
+                            <span className="bg-amber-500/15 text-amber-400 px-2 py-0.5 rounded text-[9px] font-semibold flex items-center gap-0.5 border border-amber-500/20">
+                              <Crown className="h-2.5 w-2.5" />
+                              HOST
                             </span>
                           )}
                           {d.is_frozen && (
-                            <span className="bg-orange-100 text-orange-700 dark:bg-orange-900 dark:text-orange-300 text-xs px-2 py-0.5 rounded-full font-medium flex items-center gap-1">
-                              <Snowflake className="h-3 w-3" />
-                              Frozen
+                            <span className="bg-orange-500/15 text-orange-400 px-2 py-0.5 rounded text-[9px] font-semibold border border-orange-500/20">
+                              FROZEN
                             </span>
                           )}
                           {d.can_view === false && (
-                            <span className="bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300 text-xs px-2 py-0.5 rounded-full font-medium flex items-center gap-1">
-                              <EyeOff className="h-3 w-3" />
-                              Hidden
+                            <span className="bg-red-500/15 text-red-400 px-2 py-0.5 rounded text-[9px] font-semibold border border-red-500/20">
+                              HIDDEN
                             </span>
                           )}
                           {!isOnline && (
-                            <span className="text-xs text-muted-foreground flex items-center gap-1">
-                              <Clock className="h-3 w-3" />
+                            <span className="text-[9px] text-muted-foreground/70 flex items-center gap-0.5">
+                              <Clock className="h-2.5 w-2.5" />
                               {formatLastSeen(d.last_seen)}
                             </span>
                           )}
                         </div>
                       </div>
                     </div>
+
+                    {/* Action Buttons + Expand/Collapse Button */}
+                    <div className="flex items-center gap-1.5 shrink-0 overflow-x-auto scrollbar-none">
+                      {/* Host Action Buttons */}
+                      {isHost && d.device_id !== selfId && (
+                        <>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              toggleFreeze(d.device_id, d.is_frozen || false);
+                            }}
+                            disabled={loading[`freeze-${d.device_id}`]}
+                            className="sm:h-7 h-6 sm:px-3 px-0 sm:w-auto w-6 text-[10px] font-medium rounded shrink-0 hover:bg-primary/15 hover:scale-105 transition-all"
+                            title={
+                              d.is_frozen ? "Unfreeze device" : "Freeze device"
+                            }
+                          >
+                            {loading[`freeze-${d.device_id}`] ? (
+                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                            ) : d.is_frozen ? (
+                              <>
+                                <Play className="h-3.5 w-3.5 sm:mr-1" />
+                                <span className="hidden sm:inline">
+                                  Unfreeze
+                                </span>
+                              </>
+                            ) : (
+                              <>
+                                <Snowflake className="h-3.5 w-3.5 sm:mr-1" />
+                                <span className="hidden sm:inline">Freeze</span>
+                              </>
+                            )}
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              toggleView(d.device_id, d.can_view !== false);
+                            }}
+                            disabled={loading[`view-${d.device_id}`]}
+                            className="sm:h-7 h-6 sm:px-3 px-0 sm:w-auto w-6 text-[10px] font-medium rounded shrink-0 hover:bg-primary/15 hover:scale-105 transition-all"
+                            title={
+                              d.can_view === false
+                                ? "Show items to device"
+                                : "Hide items from device"
+                            }
+                          >
+                            {loading[`view-${d.device_id}`] ? (
+                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                            ) : d.can_view === false ? (
+                              <>
+                                <Eye className="h-3.5 w-3.5 sm:mr-1" />
+                                <span className="hidden sm:inline">Show</span>
+                              </>
+                            ) : (
+                              <>
+                                <EyeOff className="h-3.5 w-3.5 sm:mr-1" />
+                                <span className="hidden sm:inline">Hide</span>
+                              </>
+                            )}
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              toggleExport(d.device_id, d.can_export !== false);
+                            }}
+                            disabled={loading[`export-${d.device_id}`]}
+                            className="sm:h-6 sm:px-3 px-0 sm:w-auto w-6 text-[10px] font-medium rounded shrink-0 hover:bg-primary/15 hover:scale-105 transition-all"
+                            title={
+                              d.can_export === false
+                                ? "Allow exporting history"
+                                : "Block exporting history"
+                            }
+                          >
+                            {loading[`export-${d.device_id}`] ? (
+                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                            ) : d.can_export === false ? (
+                              <>
+                                <Download className="h-3.5 w-3.5 sm:mr-1" />
+                                <span className="hidden sm:inline">
+                                  Allow Export
+                                </span>
+                              </>
+                            ) : (
+                              <>
+                                <Ban className="h-3.5 w-3.5 sm:mr-1" />
+                                <span className="hidden sm:inline">
+                                  Block Export
+                                </span>
+                              </>
+                            )}
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              toggleDeleteItems(
+                                d.device_id,
+                                d.can_delete_items !== false
+                              );
+                            }}
+                            disabled={loading[`delete-${d.device_id}`]}
+                            className="sm:h-7 h-6 sm:px-3 px-0 sm:w-auto w-6 text-[10px] font-medium rounded shrink-0 hover:bg-primary/15 hover:scale-105 transition-all"
+                            title={
+                              d.can_delete_items === false
+                                ? "Allow deleting items"
+                                : "Block deleting items"
+                            }
+                          >
+                            {loading[`delete-${d.device_id}`] ? (
+                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                            ) : d.can_delete_items === false ? (
+                              <>
+                                <Trash2 className="h-3.5 w-3.5 sm:mr-1" />
+                                <span className="hidden sm:inline">
+                                  Allow Delete
+                                </span>
+                              </>
+                            ) : (
+                              <>
+                                <Ban className="h-3.5 w-3.5 sm:mr-1" />
+                                <span className="hidden sm:inline">
+                                  Block Delete
+                                </span>
+                              </>
+                            )}
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              kick(d.device_id);
+                            }}
+                            disabled={loading[d.device_id]}
+                            className="sm:h-7 h-6 sm:px-3 px-0 sm:w-auto w-6 text-[10px] font-medium rounded shrink-0 hover:bg-destructive/15 hover:scale-105 transition-all text-destructive"
+                            title="Remove device from session"
+                          >
+                            {loading[d.device_id] ? (
+                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                            ) : (
+                              <>
+                                <Trash2 className="h-3.5 w-3.5 sm:mr-1" />
+                                <span className="hidden sm:inline">Remove</span>
+                              </>
+                            )}
+                          </Button>
+                        </>
+                      )}
+
+                      {/* Leave Session Button for Current User */}
+                      {d.device_id === selfId && (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            leaveSession(d.device_id, d.is_host || false);
+                          }}
+                          disabled={loading[`leave-${d.device_id}`]}
+                          className="sm:h-7 h-6 sm:px-3 px-0 sm:w-auto w-6 text-[10px] font-medium rounded shrink-0 hover:bg-destructive/15 hover:scale-105 transition-all text-destructive"
+                          title="Leave session"
+                        >
+                          {loading[`leave-${d.device_id}`] ? (
+                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          ) : (
+                            <>
+                              <LogOut className="h-3.5 w-3.5 sm:mr-1" />
+                              <span className="hidden sm:inline">
+                                Leave Session
+                              </span>
+                            </>
+                          )}
+                        </Button>
+                      )}
+
+                      {/* Expand/Collapse Button */}
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => {
+                          const newExpanded = new Set(expandedDevices);
+                          if (isExpanded) {
+                            newExpanded.delete(d.device_id);
+                          } else {
+                            newExpanded.add(d.device_id);
+                          }
+                          setExpandedDevices(newExpanded);
+                        }}
+                        className="sm:h-7 sm:w-7 h-6 w-6 p-0 shrink-0 hover:bg-primary/10 rounded transition-all"
+                        title={isExpanded ? "Hide details" : "Show details"}
+                      >
+                        {isExpanded ? (
+                          <ChevronUp className="sm:h-3.5 sm:w-3.5 h-3 w-3" />
+                        ) : (
+                          <ChevronDown className="sm:h-3.5 sm:w-3.5 h-3 w-3" />
+                        )}
+                      </Button>
+                    </div>
                   </div>
 
-                  {/* Expand Button */}
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => toggleDeviceExpansion(d.device_id)}
-                    className="h-8 w-8 p-0 rounded-full hover:bg-muted/50"
-                  >
-                    {isExpanded ? (
-                      <ChevronUp className="h-4 w-4" />
-                    ) : (
-                      <ChevronDown className="h-4 w-4" />
-                    )}
-                  </Button>
-                </div>
-
-                {/* Expanded Details */}
-                {isExpanded && (
-                  <div className="mt-3 pt-3 border-t space-y-2 sm:space-y-3">
-                    <div className="grid grid-cols-1 gap-2 sm:gap-3 text-xs">
-                      <div className="space-y-2">
-                        <div className="flex items-center gap-2 text-muted-foreground">
-                          <Info className="h-3 w-3" />
-                          <span className="font-medium">Device Details</span>
-                        </div>
-                        <div className="pl-3 sm:pl-5 space-y-1">
-                          <div>
-                            <span className="text-xs text-muted-foreground">
-                              Device ID:
-                            </span>
-                            <p className="font-mono text-xs text-foreground break-all">
+                  {/* Expanded Metadata Section */}
+                  {isExpanded && (
+                    <div className="pt-2 border-t border-primary/10 space-y-2 animate-in slide-in-from-top-2 duration-200">
+                      <div className="grid grid-cols-1 gap-2 text-[10px]">
+                        {/* Device ID */}
+                        <div className="flex items-start justify-between gap-2 bg-muted/30 p-2 rounded">
+                          <div className="flex items-center gap-1.5 text-muted-foreground">
+                            <Info className="h-3 w-3 shrink-0" />
+                            <span className="font-medium">Device ID:</span>
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <code className="text-foreground font-mono text-[9px] break-all">
                               {d.device_id}
-                            </p>
-                          </div>
-                          <div>
-                            <span className="text-xs text-muted-foreground">
-                              Joined:
-                            </span>
-                            <p className="text-xs">
-                              {new Date(d.created_at).toLocaleString()}
-                            </p>
+                            </code>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => {
+                                navigator.clipboard.writeText(d.device_id);
+                              }}
+                              className="h-4 w-4 p-0 hover:bg-primary/10"
+                              title="Copy Device ID"
+                            >
+                              <Copy className="h-2.5 w-2.5" />
+                            </Button>
                           </div>
                         </div>
-                      </div>
-                      <div className="space-y-2">
-                        <div className="flex items-center gap-2 text-muted-foreground">
-                          <Globe className="h-3 w-3" />
-                          <span className="font-medium">Connection Info</span>
-                        </div>
-                        <div className="pl-3 sm:pl-5 space-y-1">
-                          <div>
-                            <span className="text-xs text-muted-foreground">
-                              Status:
-                            </span>
-                            <p className="text-xs">
-                              {isOnline ? "Active" : "Inactive"}
-                            </p>
+
+                        {/* Last Seen */}
+                        <div className="flex items-start justify-between gap-2 bg-muted/30 p-2 rounded">
+                          <div className="flex items-center gap-1.5 text-muted-foreground">
+                            <Clock className="h-3 w-3 shrink-0" />
+                            <span className="font-medium">Last Seen:</span>
                           </div>
-                          <div>
-                            <span className="text-xs text-muted-foreground">
-                              Last Activity:
+                          <span className="text-foreground text-right">
+                            {new Date(d.last_seen).toLocaleString()}
+                          </span>
+                        </div>
+
+                        {/* Joined At */}
+                        <div className="flex items-start justify-between gap-2 bg-muted/30 p-2 rounded">
+                          <div className="flex items-center gap-1.5 text-muted-foreground">
+                            <Globe className="h-3 w-3 shrink-0" />
+                            <span className="font-medium">Joined:</span>
+                          </div>
+                          <span className="text-foreground text-right">
+                            {new Date(d.created_at).toLocaleString()}
+                          </span>
+                        </div>
+
+                        {/* Permissions */}
+                        <div className="flex items-start justify-between gap-2 bg-muted/30 p-2 rounded">
+                          <div className="flex items-center gap-1.5 text-muted-foreground">
+                            <UserCheck className="h-3 w-3 shrink-0" />
+                            <span className="font-medium">Permissions:</span>
+                          </div>
+                          <div className="flex items-center gap-1 flex-wrap justify-end">
+                            <span
+                              className={`px-1.5 py-0.5 rounded ${d.can_view !== false ? "bg-green-500/15 text-green-400" : "bg-red-500/15 text-red-400"}`}
+                            >
+                              View: {d.can_view !== false ? "✓" : "✗"}
                             </span>
-                            <p className="text-xs">
-                              {new Date(d.last_seen).toLocaleString()}
-                            </p>
+                            <span
+                              className={`px-1.5 py-0.5 rounded ${d.can_export !== false ? "bg-green-500/15 text-green-400" : "bg-red-500/15 text-red-400"}`}
+                            >
+                              Export: {d.can_export !== false ? "✓" : "✗"}
+                            </span>
+                            <span
+                              className={`px-1.5 py-0.5 rounded ${d.can_delete_items !== false ? "bg-green-500/15 text-green-400" : "bg-red-500/15 text-red-400"}`}
+                            >
+                              Delete: {d.can_delete_items !== false ? "✓" : "✗"}
+                            </span>
                           </div>
                         </div>
                       </div>
                     </div>
-                  </div>
-                )}
-
-                {/* Action Buttons Row - Only for host controls */}
-                {isHost && d.device_id !== selfId && (
-                  <div className="flex items-center gap-1 sm:gap-2 flex-wrap justify-end sm:justify-start mt-2 pt-2 sm:mt-3 sm:pt-3 border-t">
-                    {/* Host controls for other devices */}
-                    <Button
-                      size="sm"
-                      variant={d.is_frozen ? "default" : "outline"}
-                      onClick={() =>
-                        toggleFreeze(d.device_id, d.is_frozen || false)
-                      }
-                      disabled={loading[`freeze-${d.device_id}`]}
-                      className="text-xs px-2 py-1"
-                    >
-                      {loading[`freeze-${d.device_id}`]
-                        ? "..."
-                        : d.is_frozen
-                          ? "Unfreeze"
-                          : "Freeze"}
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant={d.can_view === false ? "default" : "outline"}
-                      onClick={() =>
-                        toggleView(d.device_id, d.can_view !== false)
-                      }
-                      disabled={loading[`view-${d.device_id}`]}
-                      className="text-xs px-2 py-1"
-                    >
-                      {loading[`view-${d.device_id}`]
-                        ? "..."
-                        : d.can_view === false
-                          ? "Show"
-                          : "Hide"}
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant={d.can_export === false ? "default" : "outline"}
-                      onClick={() =>
-                        toggleExport(d.device_id, d.can_export !== false)
-                      }
-                      disabled={loading[`export-${d.device_id}`]}
-                      className="text-xs px-2 py-1"
-                      title={
-                        d.can_export === false
-                          ? "Allow exporting history"
-                          : "Block exporting history"
-                      }
-                    >
-                      {loading[`export-${d.device_id}`]
-                        ? "..."
-                        : d.can_export === false
-                          ? "Allow Export"
-                          : "Block Export"}
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant={
-                        d.can_delete_items === false ? "default" : "outline"
-                      }
-                      onClick={() =>
-                        toggleDeleteItems(
-                          d.device_id,
-                          d.can_delete_items !== false
-                        )
-                      }
-                      disabled={loading[`delete-${d.device_id}`]}
-                      className="text-xs px-2 py-1"
-                      title={
-                        d.can_delete_items === false
-                          ? "Allow deleting items"
-                          : "Block deleting items"
-                      }
-                    >
-                      {loading[`delete-${d.device_id}`]
-                        ? "..."
-                        : d.can_delete_items === false
-                          ? "Allow Delete"
-                          : "Block Delete"}
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="destructive"
-                      onClick={() => kick(d.device_id)}
-                      disabled={loading[d.device_id]}
-                      className="text-xs px-2 py-1"
-                    >
-                      {loading[d.device_id] ? "..." : "Remove"}
-                    </Button>
-                  </div>
-                )}
-
-                {/* Leave Session button for current user */}
-                {d.device_id === selfId && (
-                  <div className="flex items-center gap-1 sm:gap-2 flex-wrap justify-end sm:justify-start mt-2 pt-2 sm:mt-3 sm:pt-3 border-t">
-                    <Button
-                      size="sm"
-                      variant="destructive"
-                      onClick={() =>
-                        leaveSession(d.device_id, d.is_host || false)
-                      }
-                      disabled={loading[`leave-${d.device_id}`]}
-                      className="text-xs px-2 py-1 gap-1"
-                    >
-                      <LogOut className="h-3 w-3" />
-                      {loading[`leave-${d.device_id}`]
-                        ? "Leaving..."
-                        : "Leave Session"}
-                    </Button>
-                  </div>
-                )}
+                  )}
+                </div>
               </li>
             );
           })}

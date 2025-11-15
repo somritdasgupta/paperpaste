@@ -19,15 +19,12 @@ import {
   Laptop,
   Monitor,
   Tablet,
-  Crown,
-  Users,
   ArrowRight,
   Shield,
-  Zap,
-  Globe,
   Check,
   Loader2,
   AlertTriangle,
+  Globe,
 } from "lucide-react";
 
 export default function PairingScreen({
@@ -281,7 +278,7 @@ export default function PairingScreen({
       <div className="fixed inset-0 pointer-events-none overflow-hidden z-0">
         {/* Grid pattern */}
         <div className="absolute inset-0 bg-[linear-gradient(to_right,#80808012_1px,transparent_1px),linear-gradient(to_bottom,#80808012_1px,transparent_1px)] bg-size-[4rem_4rem]"></div>
-        
+
         {/* Gradient orbs */}
         <div className="absolute top-20 left-10 w-72 h-72 bg-primary/5 rounded-full blur-3xl animate-pulse"></div>
         <div
@@ -289,131 +286,63 @@ export default function PairingScreen({
           style={{ animationDelay: "1s" }}
         ></div>
       </div>
-      
-      <div className="relative z-10 w-full max-w-4xl mx-auto">
-        {/* Header */}
-        <div className="text-center mb-6 sm:mb-8">
-          <div className="inline-flex items-center gap-3 mb-4">
-            <div className="p-3 rounded-sm bg-primary/10 border border-primary/20">
-              <Globe className="h-8 w-8 text-primary" />
-            </div>
-            <div className="h-8 w-px bg-border" />
-            <Badge
-              variant="secondary"
-              className="px-4 py-2 text-lg font-semibold session-code"
-            >
-              {code}
-            </Badge>
-          </div>
-          <h1 className="text-3xl sm:text-4xl lg:text-5xl font-extrabold tracking-tight mb-3">
-            {isNew ? "Session Created" : "Join Session"}
-          </h1>
-          <p className="text-base sm:text-lg text-muted-foreground max-w-2xl mx-auto leading-relaxed">
-            {isNew
-              ? "Your secure session is ready. Share the link or QR code to connect devices."
-              : hostDeviceName
-              ? `Connect to ${hostDeviceName}'s session to start sharing clipboard data securely.`
-              : "Connect this device to start sharing clipboard data securely in real-time."}
-          </p>
-        </div>
 
-        {/* Main Content */}
-        <div className="grid lg:grid-cols-2 gap-6 sm:gap-8 mb-6 sm:mb-8">
-          {/* Left Side - QR Code */}
-          <Card className="p-4 sm:p-8 text-center border-2 hover:border-primary/20 transition-colors">
-            <CardHeader className="pb-6">
-              <CardTitle className="flex items-center justify-center gap-2 text-xl">
-                <Shield className="h-5 w-5 text-primary" />
-                Let's Connect
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <div className="relative inline-block">
-                <div className="absolute -inset-4 bg-linear-to-r from-primary/20 to-accent/20 rounded-sm blur-lg opacity-30"></div>
+      <div className="relative z-10 w-full max-w-3xl mx-auto">
+        {/* Single Modern Card */}
+        <Card className="p-6 sm:p-10 border-2 hover:border-primary/20 transition-colors backdrop-blur-sm bg-card/95">
+          <CardContent className="space-y-8 p-0">
+            {/* Header Section */}
+            <div className="text-center space-y-4">
+              <Badge
+                variant="secondary"
+                className="px-5 py-2.5 text-2xl font-bold session-code shadow-lg"
+              >
+                {code}
+              </Badge>
+              <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">
+                {isNew ? "Session Ready" : "Join Session"}
+              </h1>
+              <p className="text-sm sm:text-base text-muted-foreground max-w-lg mx-auto">
+                {isNew
+                  ? "Share the QR code or link to connect devices securely."
+                  : hostDeviceName
+                    ? `Connect to ${hostDeviceName}'s session.`
+                    : "Connect this device to share clipboard data."}
+              </p>
+            </div>
+
+            {/* QR Code Section */}
+            <div className="flex flex-col items-center space-y-4">
+              <div className="relative">
+                <div className="absolute -inset-3 bg-primary/10 rounded blur-xl"></div>
                 <img
-                  src={`https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=${encodeURIComponent(
+                  src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(
                     invite
-                  )}&bgcolor=FFFFFF&color=000000&margin=20`}
+                  )}&bgcolor=FFFFFF&color=000000&margin=15`}
                   alt="Session QR Code"
-                  width={240}
-                  height={240}
-                  className="relative rounded-sm border-2 border-muted shadow-xl"
+                  width={200}
+                  height={200}
+                  className="relative rounded border-2 border-border shadow-lg"
                 />
               </div>
-              <div className="p-4 bg-muted/50 rounded-sm border">
-                <p className="text-sm font-mono text-muted-foreground break-all">
+              <div className="w-full max-w-md p-3 bg-muted/50 rounded border text-center">
+                <p className="text-xs font-mono text-muted-foreground break-all">
                   {invite}
                 </p>
               </div>
-            </CardContent>
-          </Card>
+            </div>
 
-          {/* Right Side - Device Connection */}
-          <Card className="p-4 sm:p-8 border-2 hover:border-primary/20 transition-colors">
-            <CardHeader className="pb-6">
-              <CardTitle className="flex items-center justify-center gap-2 text-xl">
-                {renderDetectedDeviceIcon()}
-                <CardDescription className="text-sm sm:text-base text-center">
-                  {isNew ? "Start as session host" : "Join as participant"}
-                </CardDescription>
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              {/* Features */}
-              <div className="space-y-4">
-                <div className="flex items-center gap-3 p-3 rounded-sm bg-primary/5 border border-primary/10">
-                  <div className="p-2 rounded-sm bg-primary/10">
-                    <Zap className="h-4 w-4 text-primary" />
-                  </div>
-                  <div>
-                    <p className="font-semibold text-sm">Real-time Sync</p>
-                    <p className="text-xs text-muted-foreground">
-                      Instant clipboard sharing
-                    </p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-3 p-3 rounded-sm bg-green-500/5 border border-green-500/10">
-                  <div className="p-2 rounded-sm bg-green-500/10">
-                    <Shield className="h-4 w-4 text-green-600" />
-                  </div>
-                  <div>
-                    <p className="font-semibold text-sm">
-                      End-to-End Encrypted
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      Your data stays private
-                    </p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-3 p-3 rounded-sm bg-blue-500/5 border border-blue-500/10">
-                  <div className="p-2 rounded-sm bg-blue-500/10">
-                    <Users className="h-4 w-4 text-blue-600" />
-                  </div>
-                  <div>
-                    <p className="font-semibold text-sm">
-                      Multi-Device Support
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      Connect unlimited devices
-                    </p>
-                  </div>
-                </div>
-                {isNew && (
-                  <div className="flex items-center gap-3 p-3 rounded-sm bg-amber-500/5 border border-amber-500/10">
-                    <div className="p-2 rounded-sm bg-amber-500/10">
-                      <Crown className="h-4 w-4 text-amber-600" />
-                    </div>
-                    <div>
-                      <p className="font-semibold text-sm">Host Privileges</p>
-                      <p className="text-xs text-muted-foreground">
-                        Manage session and devices
-                      </p>
-                    </div>
-                  </div>
-                )}
-              </div>
+            {/* Device Info */}
+            <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
+              {renderDetectedDeviceIcon()}
+              <span>
+                {isNew ? "Starting as host" : "Joining as participant"}
+              </span>
+            </div>
 
-              {/* Mobile Swipe to Join / Desktop Button */}
+            {/* Action Button Section */}
+            <div className="space-y-4">
+              {/* Mobile Swipe to Join */}
               <div className="block sm:hidden">
                 <div
                   ref={swipeContainerRef}
@@ -436,17 +365,17 @@ export default function PairingScreen({
                     {busy
                       ? "Connecting..."
                       : isDragging
-                      ? (() => {
-                          const containerWidth =
-                            swipeContainerRef.current?.offsetWidth || 0;
-                          const buttonWidth = 56;
-                          const maxSwipe = containerWidth - buttonWidth - 8;
-                          const threshold = maxSwipe * 0.7;
-                          return swipeX >= threshold
-                            ? "Release to join!"
-                            : "Keep swiping...";
-                        })()
-                      : `Swipe to ${isNew ? "Start" : "Join"}`}
+                        ? (() => {
+                            const containerWidth =
+                              swipeContainerRef.current?.offsetWidth || 0;
+                            const buttonWidth = 56;
+                            const maxSwipe = containerWidth - buttonWidth - 8;
+                            const threshold = maxSwipe * 0.7;
+                            return swipeX >= threshold
+                              ? "Release to join!"
+                              : "Keep swiping...";
+                          })()
+                        : `Swipe to ${isNew ? "Start" : "Join"}`}
                   </div>
                   <div
                     ref={swipeButtonRef}
@@ -549,19 +478,19 @@ export default function PairingScreen({
               </div>
 
               {error && (
-                <div className="flex items-center gap-3 p-4 text-sm text-destructive bg-destructive/10 border border-destructive/20 rounded-sm">
+                <div className="flex items-center gap-3 p-4 text-sm text-destructive bg-destructive/10 border border-destructive/20 rounded">
                   <AlertTriangle className="h-4 w-4 shrink-0" />
                   <span>{error}</span>
                 </div>
               )}
-            </CardContent>
-          </Card>
-        </div>
+            </div>
+          </CardContent>
+        </Card>
 
         {/* Footer */}
-        <div className="text-center pb-4">
-          <p className="text-xs sm:text-sm text-muted-foreground">
-            PaperPaste is built on E2E encryption • No data stored on servers
+        <div className="text-center mt-6">
+          <p className="text-xs text-muted-foreground">
+            End-to-end encrypted • No data stored on servers
           </p>
         </div>
       </div>
