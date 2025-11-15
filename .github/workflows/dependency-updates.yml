@@ -1,83 +1,83 @@
 name: Auto-update Dependencies
 
 on:
-    # Disabled automatic updates to prevent unwanted PRs
-    # schedule:
-    #     # Run every Monday at 9:00 AM UTC
-    #     - cron: "0 9 * * 1"
-    workflow_dispatch: # Allow manual trigger only
+  # Disabled automatic updates to prevent unwanted PRs
+  # schedule:
+  #     # Run every Monday at 9:00 AM UTC
+  #     - cron: "0 9 * * 1"
+  workflow_dispatch: # Allow manual trigger only
 
 jobs:
-    update-dependencies:
-        runs-on: ubuntu-latest
-        permissions:
-            contents: write
-            pull-requests: write
+  update-dependencies:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
 
-        steps:
-            - name: Checkout repository
-              uses: actions/checkout@v4
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-            - name: Install pnpm
-              uses: pnpm/action-setup@v4
-              with:
-                  version: 9
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
 
-            - name: Setup Node.js
-              uses: actions/setup-node@v4
-              with:
-                  node-version: "20"
-                  cache: "pnpm"
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "pnpm"
 
-            - name: Install dependencies
-              run: pnpm install
+      - name: Install dependencies
+        run: pnpm install
 
-            - name: Update dependencies
-              run: |
-                  # Update all dependencies to their latest versions
-                  pnpm update
+      - name: Update dependencies
+        run: |
+          # Update all dependencies to their latest versions
+          pnpm update
 
-                  # Update devDependencies
-                  pnpm update --dev
+          # Update devDependencies
+          pnpm update --dev
 
-            - name: Run tests (if they exist)
-              run: |
-                  # Check if there are test scripts
-                  if pnpm run --if-present lint; then
-                    echo "Linting passed"
-                  else
-                    echo "No lint script found or linting failed"
-                  fi
+      - name: Run tests (if they exist)
+        run: |
+          # Check if there are test scripts
+          if pnpm run --if-present lint; then
+            echo "Linting passed"
+          else
+            echo "No lint script found or linting failed"
+          fi
 
-            - name: Build project to verify updates
-              run: |
-                  pnpm run build
-              env:
-                  # Use placeholder environment variables for build
-                  NEXT_PUBLIC_SUPABASE_URL: "https://placeholder.supabase.co"
-                  NEXT_PUBLIC_SUPABASE_ANON_KEY: "placeholder-key"
+      - name: Build project to verify updates
+        run: |
+          pnpm run build
+        env:
+          # Use placeholder environment variables for build
+          NEXT_PUBLIC_SUPABASE_URL: "https://placeholder.supabase.co"
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: "placeholder-key"
 
-            - name: Create Pull Request
-              uses: peter-evans/create-pull-request@v6
-              with:
-                  token: ${{ secrets.GITHUB_TOKEN }}
-                  commit-message: "chore: update dependencies"
-                  title: "chore: automatic dependency updates"
-                  body: |
-                      This PR contains automatic dependency updates.
+      - name: Create Pull Request
+        uses: peter-evans/create-pull-request@v6
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: "chore: update dependencies"
+          title: "chore: automatic dependency updates"
+          body: |
+            This PR contains automatic dependency updates.
 
-                      ## Changes
-                      - Updated all dependencies to their latest compatible versions
-                      - Verified build still works with updated dependencies
+            ## Changes
+            - Updated all dependencies to their latest compatible versions
+            - Verified build still works with updated dependencies
 
-                      ## Testing
-                      - ✅ Build verification passed
-                      - ✅ Linting (if available) passed
+            ## Testing
+            - ✅ Build verification passed
+            - ✅ Linting (if available) passed
 
-                      Please review the changes and merge if everything looks good.
+            Please review the changes and merge if everything looks good.
 
-                      ---
-                      *This PR was created automatically by the dependency update workflow.*
-                  branch: chore/auto-dependency-updates
-                  delete-branch: true
-                  draft: false
+            ---
+            *This PR was created automatically by the dependency update workflow.*
+          branch: chore/auto-dependency-updates
+          delete-branch: true
+          draft: false

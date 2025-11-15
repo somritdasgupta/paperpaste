@@ -1,42 +1,42 @@
 name: CI
 
 on:
-    push:
-        branches: [main]
-    pull_request:
-        branches: [main]
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
 
 jobs:
-    test:
-        runs-on: ubuntu-latest
+  test:
+    runs-on: ubuntu-latest
 
-        steps:
-            - name: Checkout repository
-              uses: actions/checkout@v4
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-            - name: Install pnpm
-              uses: pnpm/action-setup@v4
-              with:
-                  version: 9
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
 
-            - name: Setup Node.js
-              uses: actions/setup-node@v4
-              with:
-                  node-version: "20"
-                  cache: "pnpm"
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "pnpm"
 
-            - name: Install dependencies
-              run: pnpm install
+      - name: Install dependencies
+        run: pnpm install
 
-            - name: Run linting
-              run: pnpm run lint
+      - name: Run linting
+        run: pnpm run lint
 
-            - name: Build application
-              run: pnpm run build
-              env:
-                  # Use placeholder environment variables for build
-                  NEXT_PUBLIC_SUPABASE_URL: "https://placeholder.supabase.co"
-                  NEXT_PUBLIC_SUPABASE_ANON_KEY: "placeholder-key"
+      - name: Build application
+        run: pnpm run build
+        env:
+          # Use placeholder environment variables for build
+          NEXT_PUBLIC_SUPABASE_URL: "https://placeholder.supabase.co"
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: "placeholder-key"
 
-            - name: Check for TypeScript errors
-              run: pnpm run build 2>&1 | grep -i "error" && exit 1 || echo "No build errors found"
+      - name: Check for TypeScript errors
+        run: pnpm run build 2>&1 | grep -i "error" && exit 1 || echo "No build errors found"

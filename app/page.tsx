@@ -79,7 +79,7 @@ export default function HomePage() {
   };
 
   return (
-    <main className="relative flex-1 bg-gradient-to-br from-background via-background to-muted/30 overflow-hidden flex items-center justify-center">
+    <main className="relative flex-1 bg-linear-to-br from-background via-background to-muted/30 overflow-hidden flex items-center justify-center">
       {/* Background Graphics */}
       <div className="absolute inset-0 pointer-events-none overflow-hidden z-0">
         {/* Gradient orbs */}
@@ -91,7 +91,7 @@ export default function HomePage() {
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] bg-primary/5 rounded-full blur-3xl"></div>
 
         {/* Grid pattern */}
-        <div className="absolute inset-0 bg-[linear-gradient(to_right,#80808012_1px,transparent_1px),linear-gradient(to_bottom,#80808012_1px,transparent_1px)] bg-[size:4rem_4rem]"></div>
+        <div className="absolute inset-0 bg-[linear-gradient(to_right,#80808012_1px,transparent_1px),linear-gradient(to_bottom,#80808012_1px,transparent_1px)] bg-size-[4rem_4rem]"></div>
 
         {/* Abstract shapes */}
         <svg
