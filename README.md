@@ -1,6 +1,5 @@
 # PaperPaste
 
-[![CI](https://github.com/somritdasgupta/paperpaste/actions/workflows/ci.yml/badge.svg)](https://github.com/somritdasgupta/paperpaste/actions/workflows/ci.yml)
 [![CodeQL](https://github.com/somritdasgupta/paperpaste/actions/workflows/codeql.yml/badge.svg)](https://github.com/somritdasgupta/paperpaste/actions/workflows/codeql.yml)
 [![Security Audit](https://github.com/somritdasgupta/paperpaste/actions/workflows/security-audit.yml/badge.svg)](https://github.com/somritdasgupta/paperpaste/actions/workflows/security-audit.yml)
 
