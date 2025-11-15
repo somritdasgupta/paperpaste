@@ -1,0 +1,6 @@
+# Require reviews from the repo owner for changes to any files.
+* @somritdasgupta
+
+# Optionally add teams or other owners for specific directories
+# e.g. for changes to workflows, require @somritdasgupta
+.github/workflows/ @somritdasgupta
