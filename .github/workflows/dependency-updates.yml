@@ -1,9 +1,8 @@
 name: Auto-update Dependencies
 
 on:
-    schedule:
-        # Run every Monday at 9:00 AM UTC
-        - cron: "0 9 * * 1"
+    # Scheduled runs disabled to avoid creating automatic PRs that may break the app.
+    # If you wish to re-enable scheduling, re-add the cron schedule above.
     workflow_dispatch: # Allow manual trigger
 
 jobs:
@@ -56,7 +55,8 @@ jobs:
                   NEXT_PUBLIC_SUPABASE_URL: "https://placeholder.supabase.co"
                   NEXT_PUBLIC_SUPABASE_ANON_KEY: "placeholder-key"
 
-            - name: Create Pull Request
+            - name: Create Pull Request (draft)
+              # Create a draft PR so updates are reviewed and do not merge automatically
               uses: peter-evans/create-pull-request@v6
               with:
                   token: ${{ secrets.GITHUB_TOKEN }}
@@ -79,4 +79,4 @@ jobs:
                       *This PR was created automatically by the dependency update workflow.*
                   branch: chore/auto-dependency-updates
                   delete-branch: true
-                  draft: false
+                  draft: true
