@@ -287,50 +287,6 @@ export default function ClipboardInput({ code }: { code: string }) {
   const text = type === "code" ? codeContent : textContent;
   const setText = type === "code" ? setCodeContent : setTextContent;
 
-  // Simple markdown renderer for real-time preview
-  const renderMarkdown = (text: string) => {
-    if (!text) return "";
-
-    let html = text;
-
-    // Headers (must be at start of line)
-    html = html.replace(
-      /^### (.+)$/gm,
-      '<h3 class="text-lg font-bold">$1</h3>'
-    );
-    html = html.replace(/^## (.+)$/gm, '<h2 class="text-xl font-bold">$1</h2>');
-    html = html.replace(/^# (.+)$/gm, '<h1 class="text-2xl font-bold">$1</h1>');
-
-    // Bold
-    html = html.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
-
-    // Italic
-    html = html.replace(/\*(.+?)\*/g, "<em>$1</em>");
-
-    // Strikethrough
-    html = html.replace(/~~(.+?)~~/g, "<del>$1</del>");
-
-    // Underline
-    html = html.replace(/<u>(.+?)<\/u>/g, "<u>$1</u>");
-
-    // Inline code/monospace
-    html = html.replace(
-      /`(.+?)`/g,
-      '<code class="bg-muted px-1 rounded text-sm font-mono">$1</code>'
-    );
-
-    // Superscript
-    html = html.replace(/\^(.+?)\^/g, "<sup>$1</sup>");
-
-    // Subscript
-    html = html.replace(/~(.+?)~/g, "<sub>$1</sub>");
-
-    // Convert newlines to <br>
-    html = html.replace(/\n/g, "<br>");
-
-    return html;
-  };
-
   // Detect language when code content changes
   useEffect(() => {
     if (type === "code" && codeContent.trim()) {
