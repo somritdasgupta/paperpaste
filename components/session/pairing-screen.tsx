@@ -277,9 +277,22 @@ export default function PairingScreen({
 
   return (
     <main className="min-h-full bg-linear-to-br from-background via-background to-muted/30 flex items-center justify-center p-4 py-8">
-      <div className="w-full max-w-4xl mx-auto">
+      {/* Background Graphics - Fixed */}
+      <div className="fixed inset-0 pointer-events-none overflow-hidden z-0">
+        {/* Grid pattern */}
+        <div className="absolute inset-0 bg-[linear-gradient(to_right,#80808012_1px,transparent_1px),linear-gradient(to_bottom,#80808012_1px,transparent_1px)] bg-size-[4rem_4rem]"></div>
+        
+        {/* Gradient orbs */}
+        <div className="absolute top-20 left-10 w-72 h-72 bg-primary/5 rounded-full blur-3xl animate-pulse"></div>
+        <div
+          className="absolute bottom-20 right-10 w-96 h-96 bg-primary/10 rounded-full blur-3xl animate-pulse"
+          style={{ animationDelay: "1s" }}
+        ></div>
+      </div>
+      
+      <div className="relative z-10 w-full max-w-4xl mx-auto">
         {/* Header */}
-        <div className="text-center mb-8">
+        <div className="text-center mb-6 sm:mb-8">
           <div className="inline-flex items-center gap-3 mb-4">
             <div className="p-3 rounded-sm bg-primary/10 border border-primary/20">
               <Globe className="h-8 w-8 text-primary" />
@@ -305,7 +318,7 @@ export default function PairingScreen({
         </div>
 
         {/* Main Content */}
-        <div className="grid lg:grid-cols-2 gap-8 mb-8">
+        <div className="grid lg:grid-cols-2 gap-6 sm:gap-8 mb-6 sm:mb-8">
           {/* Left Side - QR Code */}
           <Card className="p-4 sm:p-8 text-center border-2 hover:border-primary/20 transition-colors">
             <CardHeader className="pb-6">
@@ -316,7 +329,7 @@ export default function PairingScreen({
             </CardHeader>
             <CardContent className="space-y-6">
               <div className="relative inline-block">
-                <div className="absolute -inset-4 bg-gradient-to-r from-primary/20 to-accent/20 rounded-sm blur-lg opacity-30"></div>
+                <div className="absolute -inset-4 bg-linear-to-r from-primary/20 to-accent/20 rounded-sm blur-lg opacity-30"></div>
                 <img
                   src={`https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=${encodeURIComponent(
                     invite
@@ -437,7 +450,7 @@ export default function PairingScreen({
                   </div>
                   <div
                     ref={swipeButtonRef}
-                    className="h-14 w-14 bg-gradient-to-r from-primary to-primary/90 rounded-sm flex items-center justify-center shadow-lg touch-none transition-all duration-200 ease-out"
+                    className="h-14 w-14 bg-linear-to-r from-primary to-primary/90 rounded-sm flex items-center justify-center shadow-lg touch-none transition-all duration-200 ease-out"
                     style={{
                       transform: `translateX(${swipeX}px)`,
                       cursor: isDragging ? "grabbing" : "grab",
@@ -519,7 +532,7 @@ export default function PairingScreen({
                   size="lg"
                   onClick={getIn}
                   disabled={busy}
-                  className="w-full py-4 text-lg font-semibold gap-3 bg-gradient-to-r from-primary to-primary/90 hover:from-primary/90 hover:to-primary shadow-lg hover:shadow-xl transition-all duration-200"
+                  className="w-full py-4 text-lg font-semibold gap-3 bg-linear-to-r from-primary to-primary/90 hover:from-primary/90 hover:to-primary shadow-lg hover:shadow-xl transition-all duration-200"
                 >
                   {busy ? (
                     <>
@@ -537,7 +550,7 @@ export default function PairingScreen({
 
               {error && (
                 <div className="flex items-center gap-3 p-4 text-sm text-destructive bg-destructive/10 border border-destructive/20 rounded-sm">
-                  <AlertTriangle className="h-4 w-4 flex-shrink-0" />
+                  <AlertTriangle className="h-4 w-4 shrink-0" />
                   <span>{error}</span>
                 </div>
               )}
