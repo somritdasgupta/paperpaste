@@ -9,7 +9,6 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
 import {
   Select,
   SelectContent,
@@ -26,7 +25,6 @@ import {
   Smartphone,
   Laptop,
   Monitor,
-  Tablet,
   Crown,
   Snowflake,
   Play,
@@ -35,37 +33,41 @@ import {
   LogOut,
   Trash2,
   UserCheck,
-  AlertTriangle,
-  Timer,
-  ChevronDown,
-  ChevronUp,
-  Globe,
   Clock,
-  Info,
-  Copy,
-  Check,
   Loader2,
   Download,
   Ban,
+  ShieldCheck,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react";
 import MaskedOverlay from "@/components/ui/masked-overlay";
+import { useHistoryControls } from "./history-controls-context";
 
 type Device = {
   id: string;
-  session_code: string;
   device_id: string;
-  device_name_encrypted?: string;
-  device_name?: string; // decrypted name for display
+  device_name_encrypted: string;
+  device_name?: string;
+  is_host: boolean;
+  can_view: boolean;
+  is_frozen: boolean;
+  can_export: boolean;
+  can_delete_items: boolean;
   last_seen: string;
-  is_host?: boolean | null;
   created_at: string;
-  is_frozen?: boolean;
-  can_view?: boolean;
-  can_export?: boolean;
-  can_delete_items?: boolean;
 };
 
 export default function DevicesPanel({ code }: { code: string }) {
+  const { 
+    openBottomSheet, 
+    exportEnabled, 
+    setExportEnabled, 
+    deletionEnabled, 
+    setDeletionEnabled,
+    setCanExport,
+  } = useHistoryControls();
+  
   const supabase = getSupabaseBrowserWithCode(code);
   const [devices, setDevices] = useState<Device[]>([]);
   const [selfId, setSelfId] = useState<string>("");
@@ -77,148 +79,96 @@ export default function DevicesPanel({ code }: { code: string }) {
   const [expandedDevices, setExpandedDevices] = useState<Set<string>>(
     new Set()
   );
-  const [refreshTrigger, setRefreshTrigger] = useState(0);
   const [isHost, setIsHost] = useState(false);
   const [redirectCountdown, setRedirectCountdown] = useState<number | null>(
     null
   );
   const [redirectReason, setRedirectReason] = useState<string>("");
 
+  // Initialize
   useEffect(() => {
-    setIsHost(localStorage.getItem(`pp-host-${code}`) === "1");
-  }, [code]);
-
-  const startRedirectCountdown = (reason: string) => {
-    setRedirectReason(reason);
-    setRedirectCountdown(5);
-
-    const countdownInterval = setInterval(() => {
-      setRedirectCountdown((prev) => {
-        if (prev === null || prev <= 1) {
-          clearInterval(countdownInterval);
-          // Clear local storage and redirect
-          localStorage.removeItem(`pp-host-${code}`);
-          localStorage.removeItem(`pp-joined-${code}`);
-          window.location.href = "/";
-          return null;
-        }
-        return prev - 1;
-      });
-    }, 1000);
-  };
-
-  const toggleDeviceExpansion = (deviceId: string) => {
-    const newExpanded = new Set(expandedDevices);
-    if (newExpanded.has(deviceId)) {
-      newExpanded.delete(deviceId);
-    } else {
-      newExpanded.add(deviceId);
-    }
-    setExpandedDevices(newExpanded);
-  };
-
-  const getDeviceIcon = (deviceName: string) => {
-    const name = deviceName.toLowerCase();
-    if (
-      name.includes("iphone") ||
-      name.includes("android") ||
-      name.includes("mobile")
-    ) {
-      return <Smartphone className="h-4 w-4" />;
-    } else if (name.includes("ipad") || name.includes("tablet")) {
-      return <Tablet className="h-4 w-4" />;
-    } else if (name.includes("mac") || name.includes("laptop")) {
-      return <Laptop className="h-4 w-4" />;
-    }
-    return <Monitor className="h-4 w-4" />;
-  };
-
-  const formatLastSeen = (lastSeen: string) => {
-    const diff = Date.now() - new Date(lastSeen).getTime();
-    const minutes = Math.floor(diff / 60000);
-    if (minutes < 1) return "Just now";
-    if (minutes < 60) return `${minutes}m ago`;
-    const hours = Math.floor(minutes / 60);
-    if (hours < 24) return `${hours}h ago`;
-    return `${Math.floor(hours / 24)}d ago`;
-  };
-
-  useEffect(() => {
-    setSelfId(getOrCreateDeviceId());
-    // Initialize session encryption key
+    const id = getOrCreateDeviceId();
+    setSelfId(id);
     generateSessionKey(code).then(setSessionKey);
   }, [code]);
 
+  // Fetch devices and session settings
+  const fetchDevices = async () => {
+    if (!supabase || !sessionKey) return;
+
+    try {
+      // Fetch session settings
+      const { data: sessionData } = await supabase
+        .from("sessions")
+        .select("export_enabled, allow_item_deletion")
+        .eq("code", code)
+        .single();
+
+      if (sessionData) {
+        setExportEnabled(sessionData.export_enabled ?? true);
+        setDeletionEnabled(sessionData.allow_item_deletion ?? true);
+      }
+
+      const { data, error } = await supabase
+        .from("devices")
+        .select("*")
+        .eq("session_code", code)
+        .order("is_host", { ascending: false })
+        .order("last_seen", { ascending: false });
+
+      if (error) throw error;
+
+      if (data) {
+        const decryptedDevices = await Promise.all(
+          data.map(async (d) => {
+            let deviceName = "Anonymous Device";
+            if (d.device_name_encrypted) {
+              try {
+                deviceName = await decryptDeviceName(
+                  d.device_name_encrypted,
+                  sessionKey
+                );
+              } catch (e) {
+                console.warn("Failed to decrypt device name:", e);
+              }
+            }
+            return { ...d, device_name: deviceName };
+          })
+        );
+        setDevices(decryptedDevices);
+
+        const me = decryptedDevices.find((d) => d.device_id === selfId);
+        if (me) {
+          setIsHost(me.is_host);
+        } else {
+          const { data: myData } = await supabase
+            .from("devices")
+            .select("device_id")
+            .eq("session_code", code)
+            .eq("device_id", selfId)
+            .single();
+            
+          if (!myData) {
+             startRedirectCountdown("You have been removed from the session.");
+          }
+        }
+      }
+    } catch (e: any) {
+      console.error("Error fetching devices:", e);
+      setError(e.message);
+    }
+  };
+
+  // Initial fetch and subscriptions
   useEffect(() => {
     if (!supabase) return;
-    let cancelled = false;
-    let heartbeatInterval: NodeJS.Timeout;
 
-    const updateHeartbeat = async () => {
-      try {
-        await supabase
-          .from("devices")
-          .update({ last_seen: new Date().toISOString() })
-          .eq("session_code", code)
-          .eq("device_id", selfId);
-      } catch (e) {
-        console.warn("Failed to update heartbeat:", e);
-      }
-    };
-
-    const fetchDevices = async () => {
-      try {
-        setError(null);
-
-        const { data, error } = await supabase
-          .from("devices")
-          .select("*")
-          .eq("session_code", code)
-          .order("created_at", { ascending: true });
-
-        if (error) throw error;
-
-        if (!cancelled && data && sessionKey) {
-          // Decrypt device names
-          const decryptedDevices = await Promise.all(
-            data.map(async (device) => {
-              let deviceName = "Anonymous Device";
-              if (device.device_name_encrypted) {
-                try {
-                  deviceName = await decryptDeviceName(
-                    device.device_name_encrypted,
-                    sessionKey
-                  );
-                } catch (e) {
-                  console.warn("Failed to decrypt device name:", e);
-                }
-              }
-              return { ...device, device_name: deviceName };
-            })
-          );
-          setDevices(decryptedDevices);
-          setError(null);
-        }
-      } catch (e: any) {
-        if (!cancelled) setError(e?.message || "Failed to fetch devices.");
-      }
-    };
-
-    fetchDevices();
-
-    // Subscribe to global refresh events instead of using a local interval.
-    const unsubscribeRefresh = subscribeToGlobalRefresh(() => {
+    if (sessionKey) {
       fetchDevices();
-    });
+    }
 
-    // setup real-time with better error handling
     const channel = supabase
-      .channel(`session-devices-${code}`, {
-        config: {
-          broadcast: { self: true },
-          presence: { key: code },
-        },
-      })
+      .channel(`devices-panel-${code}`)
       .on(
         "postgres_changes",
         {
@@ -227,319 +177,400 @@ export default function DevicesPanel({ code }: { code: string }) {
           table: "devices",
           filter: `session_code=eq.${code}`,
         },
-        (payload) => {
-          console.log("Device change detected in devices panel:", payload);
-          console.log("Event type:", payload.eventType);
-          console.log("New data:", payload.new);
-          console.log("Old data:", payload.old);
+        () => {
           fetchDevices();
         }
       )
-      .subscribe((status) => {
-        console.log("Devices subscription status:", status);
-        if (status === "SUBSCRIBED") {
-          console.log("Real-time subscription active for devices");
-        }
-      });
-
-    // Listen for session termination and device kicks
-    const killChannel = supabase
-      .channel(`session-kill-listener-${code}`)
-      .on("broadcast", { event: "session_killed" }, (payload) => {
-        if (payload.payload.code === code) {
-          startRedirectCountdown("Session terminated by host");
-        }
-      })
-      .on("broadcast", { event: "device_kicked" }, (payload) => {
-        if (payload.payload.device_id === selfId) {
-          startRedirectCountdown("You have been removed from the session");
-        }
-      })
-      .subscribe();
-
-    // Also listen for direct device deletion
-    const deviceChannel = supabase
-      .channel(`device-listener-${selfId}`)
       .on(
         "postgres_changes",
         {
-          event: "DELETE",
+          event: "UPDATE",
           schema: "public",
-          table: "devices",
-          filter: `device_id=eq.${selfId}`,
+          table: "sessions",
+          filter: `code=eq.${code}`,
         },
         (payload) => {
-          // Only trigger if it's for this session
-          if (payload.old.session_code === code) {
-            startRedirectCountdown(
-              "Your device has been removed from the session"
-            );
+          // Real-time sync for export/deletion toggles
+          if (payload.new) {
+            const newData = payload.new as any;
+            if ('export_enabled' in newData) {
+              setExportEnabled(newData.export_enabled);
+            }
+            if ('allow_item_deletion' in newData) {
+              setDeletionEnabled(newData.allow_item_deletion);
+            }
           }
         }
       )
+      .on(
+        "broadcast",
+        { event: "export_toggle" },
+        (payload: any) => {
+          setExportEnabled(payload.payload.export_enabled);
+        }
+      )
+      .on(
+        "broadcast",
+        { event: "deletion_toggle" },
+        (payload: any) => {
+          setDeletionEnabled(payload.payload.allow_item_deletion);
+        }
+      )
       .subscribe();
-
-    // Start heartbeat system - update every 30 seconds
-    if (selfId) {
-      updateHeartbeat(); // Initial heartbeat
-      heartbeatInterval = setInterval(updateHeartbeat, 30000);
-    }
+      
+    const unsubscribeGlobal = subscribeToGlobalRefresh(() => {
+        fetchDevices();
+    });
 
     return () => {
-      cancelled = true;
-      if (heartbeatInterval) clearInterval(heartbeatInterval);
-      if (unsubscribeRefresh) unsubscribeRefresh();
       supabase.removeChannel(channel);
-      supabase.removeChannel(killChannel);
-      supabase.removeChannel(deviceChannel);
+      unsubscribeGlobal();
     };
-  }, [supabase, code, sessionKey, refreshTrigger, selfId]);
+  }, [sessionKey, code, supabase]);
 
-  const kick = async (deviceId: string) => {
-    if (!supabase) return;
-    setLoading((prev) => ({ ...prev, [deviceId]: true }));
-    try {
-      // Broadcast kick event before deleting
-      await supabase.channel(`session-kill-listener-${code}`).send({
-        type: "broadcast",
-        event: "device_kicked",
-        payload: { device_id: deviceId, code },
+  const startRedirectCountdown = (reason: string) => {
+    setRedirectReason(reason);
+    setRedirectCountdown(5);
+    const interval = setInterval(() => {
+      setRedirectCountdown((prev) => {
+        if (prev === null || prev <= 1) {
+          clearInterval(interval);
+          window.location.href = "/";
+          return 0;
+        }
+        return prev - 1;
       });
+    }, 1000);
+  };
 
+  const kick = async (targetDeviceId: string) => {
+    if (!supabase || !isHost) return;
+    setLoading((prev) => ({ ...prev, [targetDeviceId]: true }));
+
+    try {
       const { error } = await supabase
         .from("devices")
         .delete()
         .eq("session_code", code)
-        .eq("device_id", deviceId);
+        .eq("device_id", targetDeviceId);
+
       if (error) throw error;
+      
+      await supabase.channel(`view-permissions-${code}`).send({
+        type: "broadcast",
+        event: "device_kicked",
+        payload: { device_id: targetDeviceId },
+      });
+      
+      setDevices((prev) => prev.filter((d) => d.device_id !== targetDeviceId));
+      triggerGlobalRefresh();
     } catch (e: any) {
-      setError(e?.message || "Failed to remove device.");
+      setError(e.message);
     } finally {
-      setLoading((prev) => ({ ...prev, [deviceId]: false }));
+      setLoading((prev) => ({ ...prev, [targetDeviceId]: false }));
     }
   };
 
-  const toggleFreeze = async (deviceId: string, currentStatus: boolean) => {
-    if (!supabase) return;
-    setLoading((prev) => ({ ...prev, [`freeze-${deviceId}`]: true }));
-    try {
-      const newStatus = !currentStatus;
+  const toggleFreeze = async (targetDeviceId: string, currentStatus: boolean) => {
+    if (!supabase || !isHost) return;
+    
+    // Optimistic update
+    setDevices(prev => prev.map(d => 
+      d.device_id === targetDeviceId ? { ...d, is_frozen: !currentStatus } : d
+    ));
+    setLoading((prev) => ({ ...prev, [`freeze-${targetDeviceId}`]: true }));
 
-      // First broadcast the change for instant UI update
+    try {
+      const { error } = await supabase
+        .from("devices")
+        .update({ is_frozen: !currentStatus })
+        .eq("session_code", code)
+        .eq("device_id", targetDeviceId);
+
+      if (error) {
+        // Revert on error
+        setDevices(prev => prev.map(d => 
+          d.device_id === targetDeviceId ? { ...d, is_frozen: currentStatus } : d
+        ));
+        throw error;
+      }
+      
       await supabase.channel(`view-permissions-${code}`).send({
         type: "broadcast",
         event: "permission_changed",
-        payload: { device_id: deviceId, is_frozen: newStatus, can_view: true },
+        payload: { device_id: targetDeviceId, is_frozen: !currentStatus },
       });
-
-      // Then update database
-      const { data, error } = await supabase
-        .from("devices")
-        .update({ is_frozen: newStatus })
-        .eq("session_code", code)
-        .eq("device_id", deviceId)
-        .select();
-      if (error) throw error;
-
-      setRefreshTrigger((prev) => prev + 1);
-      try {
-        triggerGlobalRefresh();
-      } catch {}
     } catch (e: any) {
-      setError(e?.message || "Failed to update device status.");
+      setError(e.message);
     } finally {
-      setLoading((prev) => ({ ...prev, [`freeze-${deviceId}`]: false }));
+      setLoading((prev) => ({ ...prev, [`freeze-${targetDeviceId}`]: false }));
     }
   };
 
-  const toggleView = async (deviceId: string, currentStatus: boolean) => {
-    if (!supabase) return;
-    setLoading((prev) => ({ ...prev, [`view-${deviceId}`]: true }));
-    try {
-      const newStatus = !currentStatus;
+  const toggleView = async (targetDeviceId: string, currentStatus: boolean) => {
+    if (!supabase || !isHost) return;
+    
+    // Optimistic update
+    setDevices(prev => prev.map(d => 
+      d.device_id === targetDeviceId ? { ...d, can_view: !currentStatus } : d
+    ));
+    setLoading((prev) => ({ ...prev, [`view-${targetDeviceId}`]: true }));
 
-      // First broadcast the change for instant UI update
+    try {
+      const { error } = await supabase
+        .from("devices")
+        .update({ can_view: !currentStatus })
+        .eq("session_code", code)
+        .eq("device_id", targetDeviceId);
+
+      if (error) {
+        // Revert on error
+        setDevices(prev => prev.map(d => 
+          d.device_id === targetDeviceId ? { ...d, can_view: currentStatus } : d
+        ));
+        throw error;
+      }
+
       await supabase.channel(`view-permissions-${code}`).send({
         type: "broadcast",
         event: "permission_changed",
-        payload: { device_id: deviceId, can_view: newStatus, is_frozen: false },
+        payload: { device_id: targetDeviceId, can_view: !currentStatus },
       });
-
-      // Then update database
-      const { data, error } = await supabase
-        .from("devices")
-        .update({ can_view: newStatus })
-        .eq("session_code", code)
-        .eq("device_id", deviceId)
-        .select();
-      if (error) throw error;
-
-      setRefreshTrigger((prev) => prev + 1);
-      try {
-        triggerGlobalRefresh();
-      } catch {}
     } catch (e: any) {
-      setError(e?.message || "Failed to update device permissions.");
+      setError(e.message);
     } finally {
-      setLoading((prev) => ({ ...prev, [`view-${deviceId}`]: false }));
+      setLoading((prev) => ({ ...prev, [`view-${targetDeviceId}`]: false }));
     }
   };
 
-  const toggleExport = async (deviceId: string, currentStatus: boolean) => {
-    if (!supabase) return;
-    setLoading((prev) => ({ ...prev, [`export-${deviceId}`]: true }));
-    try {
-      const newStatus = !currentStatus;
+  const toggleExport = async (targetDeviceId: string, currentStatus: boolean) => {
+    if (!supabase || !isHost) return;
+    
+    // Optimistic update
+    setDevices(prev => prev.map(d => 
+      d.device_id === targetDeviceId ? { ...d, can_export: !currentStatus } : d
+    ));
+    setLoading((prev) => ({ ...prev, [`export-${targetDeviceId}`]: true }));
 
-      // First broadcast the change for instant UI update
+    try {
+      const { error } = await supabase
+        .from("devices")
+        .update({ can_export: !currentStatus })
+        .eq("session_code", code)
+        .eq("device_id", targetDeviceId);
+
+      if (error) {
+        // Revert on error
+        setDevices(prev => prev.map(d => 
+          d.device_id === targetDeviceId ? { ...d, can_export: currentStatus } : d
+        ));
+        throw error;
+      }
+
+      // Update context if it's the current device
+      if (targetDeviceId === selfId) {
+        setCanExport(!currentStatus);
+      }
+
       await supabase.channel(`view-permissions-${code}`).send({
         type: "broadcast",
         event: "permission_changed",
-        payload: { device_id: deviceId, can_export: newStatus },
+        payload: { device_id: targetDeviceId, can_export: !currentStatus },
       });
-
-      // Then update database
-      const { data, error } = await supabase
-        .from("devices")
-        .update({ can_export: newStatus })
-        .eq("session_code", code)
-        .eq("device_id", deviceId)
-        .select();
-      if (error) throw error;
-
-      setRefreshTrigger((prev) => prev + 1);
-      try {
-        triggerGlobalRefresh();
-      } catch {}
     } catch (e: any) {
-      setError(e?.message || "Failed to update export permissions.");
+      setError(e.message);
     } finally {
-      setLoading((prev) => ({ ...prev, [`export-${deviceId}`]: false }));
+      setLoading((prev) => ({ ...prev, [`export-${targetDeviceId}`]: false }));
     }
   };
 
-  const toggleDeleteItems = async (
-    deviceId: string,
-    currentStatus: boolean
-  ) => {
-    if (!supabase) return;
-    setLoading((prev) => ({ ...prev, [`delete-${deviceId}`]: true }));
-    try {
-      const newStatus = !currentStatus;
+  const toggleDeleteItems = async (targetDeviceId: string, currentStatus: boolean) => {
+    if (!supabase || !isHost) return;
+    
+    // Optimistic update
+    setDevices(prev => prev.map(d => 
+      d.device_id === targetDeviceId ? { ...d, can_delete_items: !currentStatus } : d
+    ));
+    setLoading((prev) => ({ ...prev, [`delete-${targetDeviceId}`]: true }));
 
-      // First broadcast the change for instant UI update
+    try {
+      const { error } = await supabase
+        .from("devices")
+        .update({ can_delete_items: !currentStatus })
+        .eq("session_code", code)
+        .eq("device_id", targetDeviceId);
+
+      if (error) {
+        // Revert on error
+        setDevices(prev => prev.map(d => 
+          d.device_id === targetDeviceId ? { ...d, can_delete_items: currentStatus } : d
+        ));
+        throw error;
+      }
+
       await supabase.channel(`view-permissions-${code}`).send({
         type: "broadcast",
         event: "permission_changed",
-        payload: { device_id: deviceId, can_delete_items: newStatus },
+        payload: { device_id: targetDeviceId, can_delete_items: !currentStatus },
       });
-
-      // Then update database
-      const { data, error } = await supabase
-        .from("devices")
-        .update({ can_delete_items: newStatus })
-        .eq("session_code", code)
-        .eq("device_id", deviceId)
-        .select();
-      if (error) throw error;
-
-      setRefreshTrigger((prev) => prev + 1);
-      try {
-        triggerGlobalRefresh();
-      } catch {}
     } catch (e: any) {
-      setError(e?.message || "Failed to update delete permissions.");
+      setError(e.message);
     } finally {
-      setLoading((prev) => ({ ...prev, [`delete-${deviceId}`]: false }));
+      setLoading((prev) => ({ ...prev, [`delete-${targetDeviceId}`]: false }));
     }
   };
 
-  const leaveSession = async (deviceId: string, isHostDevice?: boolean) => {
+  const leaveSession = async (deviceId: string, isHostDevice: boolean) => {
     if (!supabase) return;
-
-    if (isHostDevice && devices.length > 1) {
-      // Host needs to transfer privileges first
-      setShowTransferHost(true);
-      return;
+    
+    if (isHostDevice) {
+      const otherDevices = devices.filter(d => d.device_id !== deviceId);
+      if (otherDevices.length > 0) {
+        setShowTransferHost(true);
+        return;
+      }
     }
 
     setLoading((prev) => ({ ...prev, [`leave-${deviceId}`]: true }));
     try {
-      // Remove device from database
-      const { error } = await supabase
+      await supabase
         .from("devices")
         .delete()
         .eq("session_code", code)
         .eq("device_id", deviceId);
-
-      if (error) throw error;
-
-      // Clear local storage and redirect
+        
       localStorage.removeItem(`pp-host-${code}`);
       localStorage.removeItem(`pp-joined-${code}`);
       window.location.href = "/";
     } catch (e: any) {
-      setError(e?.message || "Failed to leave session.");
-    } finally {
+      setError(e.message);
       setLoading((prev) => ({ ...prev, [`leave-${deviceId}`]: false }));
     }
   };
 
   const transferHostAndLeave = async () => {
     if (!supabase || !selectedNewHost) return;
-
     setLoading((prev) => ({ ...prev, transferHost: true }));
-    try {
-      // Transfer host privileges
-      await supabase
-        .from("devices")
-        .update({ is_host: false })
-        .eq("session_code", code)
-        .eq("device_id", selfId);
 
-      await supabase
+    try {
+      const { error: promoteError } = await supabase
         .from("devices")
         .update({ is_host: true })
         .eq("session_code", code)
         .eq("device_id", selectedNewHost);
 
-      // Remove current device
-      await supabase
+      if (promoteError) throw promoteError;
+
+      const { error: leaveError } = await supabase
         .from("devices")
         .delete()
         .eq("session_code", code)
         .eq("device_id", selfId);
 
-      // Clear local storage and redirect
+      if (leaveError) throw leaveError;
+
       localStorage.removeItem(`pp-host-${code}`);
       localStorage.removeItem(`pp-joined-${code}`);
       window.location.href = "/";
     } catch (e: any) {
-      setError(e?.message || "Failed to transfer host privileges.");
-    } finally {
+      setError(e.message);
       setLoading((prev) => ({ ...prev, transferHost: false }));
-      setShowTransferHost(false);
     }
+  };
+
+  const toggleGlobalExport = async () => {
+    if (!supabase || !isHost) return;
+
+    try {
+      const newStatus = !exportEnabled;
+      // Optimistic update for immediate feedback
+      setExportEnabled(newStatus);
+      
+      const { error } = await supabase
+        .from("sessions")
+        .update({ export_enabled: newStatus })
+        .eq("code", code);
+
+      if (error) {
+        // Revert on error
+        setExportEnabled(!newStatus);
+        throw error;
+      }
+
+      await supabase.channel(`sessions-${code}`).send({
+        type: "broadcast",
+        event: "export_toggle",
+        payload: { export_enabled: newStatus },
+      });
+    } catch (e: any) {
+      console.error("Toggle export error:", e);
+      setError(e.message || "Failed to toggle export");
+    }
+  };
+
+  const toggleItemDeletion = async () => {
+    if (!supabase || !isHost) return;
+
+    try {
+      const newStatus = !deletionEnabled;
+      // Optimistic update for immediate feedback
+      setDeletionEnabled(newStatus);
+      
+      const { error } = await supabase
+        .from("sessions")
+        .update({ allow_item_deletion: newStatus })
+        .eq("code", code);
+
+      if (error) {
+        // Revert on error
+        setDeletionEnabled(!newStatus);
+        throw error;
+      }
+
+      await supabase.channel(`sessions-${code}`).send({
+        type: "broadcast",
+        event: "deletion_toggle",
+        payload: { allow_item_deletion: newStatus },
+      });
+    } catch (e: any) {
+      console.error("Toggle deletion error:", e);
+      setError(e.message || "Failed to toggle deletion");
+    }
+  };
+
+  const getDeviceIcon = (deviceName: string) => {
+    const name = deviceName.toLowerCase();
+    if (name.includes("phone") || name.includes("mobile") || name.includes("android") || name.includes("iphone")) {
+      return <Smartphone className="h-4 w-4" />;
+    } else if (name.includes("laptop") || name.includes("macbook")) {
+      return <Laptop className="h-4 w-4" />;
+    }
+    return <Monitor className="h-4 w-4" />;
+  };
+
+  const formatLastSeen = (dateStr: string) => {
+    const date = new Date(dateStr);
+    const now = new Date();
+    const diff = now.getTime() - date.getTime();
+    
+    if (diff < 60000) return "Just now";
+    if (diff < 3600000) return `${Math.floor(diff / 60000)}m ago`;
+    if (diff < 86400000) return `${Math.floor(diff / 3600000)}h ago`;
+    return date.toLocaleDateString();
   };
 
   if (!supabase) return null;
 
   return (
     <div className="w-full h-full flex flex-col">
-      {/* Determine local device state and show global overlay/badge when
-          current device is frozen or hidden. This keeps UI consistent with
-          other components (dim + badge). */}
       {(() => {
         const local = devices.find((dd) => dd.device_id === selfId);
-        // Only show the full-panel overlay when the local device is hidden (can_view === false).
-        // If the device is frozen, we keep per-device frozen badges but do not block the devices panel UI.
         if (local && local.can_view === false) {
           return <MaskedOverlay variant="hidden" />;
         }
         return null;
       })()}
 
-      {/* Scrollable devices area */}
       <div className="flex-1 overflow-y-auto relative">
         {redirectCountdown !== null && (
           <div className="m-2 text-sm text-destructive bg-destructive/10 border border-destructive/20 rounded p-3 text-center">
@@ -556,377 +587,320 @@ export default function DevicesPanel({ code }: { code: string }) {
           </div>
         )}
 
-        <ul className="flex flex-col gap-0.5 font-mono text-xs">
+        <div className="px-3 py-2 space-y-2">
+          {/* Verification Button */}
+          <button
+            onClick={() => openBottomSheet("verification", { sessionKey })}
+            className="w-full flex items-center justify-between bg-green-500/10 hover:bg-green-500/20 text-green-600 dark:text-green-400 px-4 py-2.5 rounded border border-green-500/20 transition-colors group"
+          >
+            <div className="flex items-center gap-2">
+              <ShieldCheck className="h-4 w-4" />
+              <span className="text-sm font-medium">Session Verified</span>
+            </div>
+            <span className="text-[10px] opacity-70 group-hover:opacity-100 transition-opacity">
+              View Details
+            </span>
+          </button>
+
+          {/* Host Controls */}
+          {isHost && (
+            <div className="space-y-3 pt-2">
+              <div className="flex items-center justify-between text-xs font-medium text-muted-foreground px-1">
+                <span>Host Controls</span>
+              </div>
+              
+              {/* Global Permissions Grid */}
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  onClick={toggleGlobalExport}
+                  className={`flex flex-col items-center gap-1.5 p-3 rounded border transition-all ${
+                    exportEnabled
+                      ? "bg-blue-500/10 border-blue-500/30 text-blue-600 dark:text-blue-400"
+                      : "bg-slate-100 dark:bg-zinc-900 border-slate-300 dark:border-zinc-800 text-slate-600 dark:text-zinc-400"
+                  }`}
+                >
+                  <Download className="h-4 w-4" />
+                  <span className="text-[11px] font-medium">
+                    {exportEnabled ? "Export ON" : "Export OFF"}
+                  </span>
+                </button>
+
+                <button
+                  onClick={toggleItemDeletion}
+                  className={`flex flex-col items-center gap-1.5 p-3 rounded border transition-all ${
+                    deletionEnabled
+                      ? "bg-red-500/10 border-red-500/30 text-red-600 dark:text-red-400"
+                      : "bg-slate-100 dark:bg-zinc-900 border-slate-300 dark:border-zinc-800 text-slate-600 dark:text-zinc-400"
+                  }`}
+                >
+                  <Trash2 className="h-4 w-4" />
+                  <span className="text-[11px] font-medium">
+                    {deletionEnabled ? "Delete ON" : "Delete OFF"}
+                  </span>
+                </button>
+              </div>
+
+              {/* Purge Session Button */}
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => openBottomSheet("kill-session")}
+                className="w-full gap-2 text-red-600 dark:text-red-400 border-red-200 dark:border-red-900/50 hover:bg-red-500/10 hover:border-red-500/50"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+                <span className="text-xs font-medium">Purge Entire Session</span>
+              </Button>
+            </div>
+          )}
+        </div>
+
+        <div className="space-y-2 px-3 py-2">{" "}
           {devices.map((d) => {
             const timeSinceLastSeen =
               new Date().getTime() - new Date(d.last_seen).getTime();
-            const isOnline = timeSinceLastSeen < 60000; // Within 1 minute
+            const isOnline = timeSinceLastSeen < 60000;
             const isExpanded = expandedDevices.has(d.device_id);
 
             return (
-              <li
+              <div
                 key={d.id}
-                className="bg-linear-to-br from-card via-card/95 to-card/90 border border-primary/10 rounded overflow-hidden transition-all duration-300 hover:border-primary/20 hover:shadow-lg hover:shadow-primary/5"
+                className={`border rounded transition-all ${
+                  isExpanded 
+                    ? "border-gray-300 dark:border-zinc-700 bg-white dark:bg-zinc-900/30 shadow-sm dark:shadow-none" 
+                    : "border-gray-200 dark:border-zinc-800 bg-gray-50 dark:bg-zinc-900/10 hover:bg-gray-100 dark:hover:bg-zinc-900/20"
+                }`}
               >
-                {/* Main Device Card */}
-                <div className="p-3 space-y-2.5">
-                  {/* Top Row: Device Info + Actions + Expand Button */}
+                <div className="p-3">
                   <div className="flex items-center gap-3">
-                    {/* Device Identity */}
-                    <div className="flex items-center gap-2.5 flex-1 min-w-0">
-                      {/* Status Indicator + Icon */}
-                      <div className="relative shrink-0">
-                        <div className="relative">
-                          <div className="text-primary">
-                            {getDeviceIcon(d.device_name || "")}
-                          </div>
-                          {/* Status Badge Overlay */}
-                          <div
-                            className={`absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full border-2 border-card ${
-                              isOnline
-                                ? "bg-green-400 shadow-lg shadow-green-400/50"
-                                : "bg-gray-400"
-                            }`}
-                            title={isOnline ? "Online" : "Offline"}
-                          />
-                        </div>
+                    <div className="relative shrink-0">
+                      <div className="text-gray-600 dark:text-zinc-400">
+                        {getDeviceIcon(d.device_name || "")}
                       </div>
+                      <div
+                        className={`absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full border ${
+                          isOnline 
+                            ? "bg-green-500 border-white dark:border-zinc-900" 
+                            : "bg-gray-400 dark:bg-zinc-600 border-white dark:border-zinc-900"
+                        }`}
+                      />
+                    </div>
 
-                      {/* Device Name & Status */}
-                      <div className="flex-1 min-w-0 space-y-1">
-                        <h4 className="font-semibold text-sm text-foreground truncate">
-                          {d.device_name || `Device-${d.device_id.slice(0, 6)}`}
-                        </h4>
-
-                        {/* Badges Row */}
-                        <div className="flex items-center gap-1.5 flex-wrap">
-                          {d.device_id === selfId && (
-                            <span className="bg-blue-500/15 text-blue-400 px-2 py-0.5 rounded text-[9px] font-semibold border border-blue-500/20">
-                              YOU
-                            </span>
-                          )}
-                          {d.is_host && (
-                            <span className="bg-amber-500/15 text-amber-400 px-2 py-0.5 rounded text-[9px] font-semibold flex items-center gap-0.5 border border-amber-500/20">
-                              <Crown className="h-2.5 w-2.5" />
-                              HOST
-                            </span>
-                          )}
-                          {d.is_frozen && (
-                            <span className="bg-orange-500/15 text-orange-400 px-2 py-0.5 rounded text-[9px] font-semibold border border-orange-500/20">
-                              FROZEN
-                            </span>
-                          )}
-                          {d.can_view === false && (
-                            <span className="bg-red-500/15 text-red-400 px-2 py-0.5 rounded text-[9px] font-semibold border border-red-500/20">
-                              HIDDEN
-                            </span>
-                          )}
-                          {!isOnline && (
-                            <span className="text-[9px] text-muted-foreground/70 flex items-center gap-0.5">
-                              <Clock className="h-2.5 w-2.5" />
-                              {formatLastSeen(d.last_seen)}
-                            </span>
-                          )}
-                        </div>
+                    <div className="flex-1 min-w-0">
+                      <h4 className="font-medium text-sm truncate text-gray-900 dark:text-zinc-100">
+                        {d.device_name || `Device-${d.device_id.slice(0, 6)}`}
+                      </h4>
+                      <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">{" "}
+                        {d.device_id === selfId && (
+                          <span className="text-[10px] bg-blue-500/20 text-blue-400 px-1.5 py-0.5 rounded">
+                            YOU
+                          </span>
+                        )}
+                        {d.is_host && (
+                          <span className="text-[10px] bg-amber-500/20 text-amber-400 px-1.5 py-0.5 rounded flex items-center gap-0.5">
+                            <Crown className="h-2.5 w-2.5" />
+                            HOST
+                          </span>
+                        )}
+                        {d.is_frozen && (
+                          <span className="text-[10px] bg-orange-500/20 text-orange-400 px-1.5 py-0.5 rounded">
+                            FROZEN
+                          </span>
+                        )}
+                        {d.can_view === false && (
+                          <span className="text-[10px] bg-red-500/20 text-red-400 px-1.5 py-0.5 rounded">
+                            HIDDEN
+                          </span>
+                        )}
+                        {!isOnline && (
+                          <span className="text-[10px] text-zinc-500">
+                            {formatLastSeen(d.last_seen)}
+                          </span>
+                        )}
                       </div>
                     </div>
 
-                    {/* Action Buttons + Expand/Collapse Button */}
-                    <div className="flex items-center gap-1.5 shrink-0 overflow-x-auto scrollbar-none">
-                      {/* Host Action Buttons */}
-                      {isHost && d.device_id !== selfId && (
-                        <>
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              toggleFreeze(d.device_id, d.is_frozen || false);
-                            }}
-                            disabled={loading[`freeze-${d.device_id}`]}
-                            className="sm:h-7 h-6 sm:px-3 px-0 sm:w-auto w-6 text-[10px] font-medium rounded shrink-0 hover:bg-primary/15 hover:scale-105 transition-all"
-                            title={
-                              d.is_frozen ? "Unfreeze device" : "Freeze device"
-                            }
-                          >
-                            {loading[`freeze-${d.device_id}`] ? (
-                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                            ) : d.is_frozen ? (
-                              <>
-                                <Play className="h-3.5 w-3.5 sm:mr-1" />
-                                <span className="hidden sm:inline">
-                                  Unfreeze
-                                </span>
-                              </>
-                            ) : (
-                              <>
-                                <Snowflake className="h-3.5 w-3.5 sm:mr-1" />
-                                <span className="hidden sm:inline">Freeze</span>
-                              </>
-                            )}
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              toggleView(d.device_id, d.can_view !== false);
-                            }}
-                            disabled={loading[`view-${d.device_id}`]}
-                            className="sm:h-7 h-6 sm:px-3 px-0 sm:w-auto w-6 text-[10px] font-medium rounded shrink-0 hover:bg-primary/15 hover:scale-105 transition-all"
-                            title={
-                              d.can_view === false
-                                ? "Show items to device"
-                                : "Hide items from device"
-                            }
-                          >
-                            {loading[`view-${d.device_id}`] ? (
-                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                            ) : d.can_view === false ? (
-                              <>
-                                <Eye className="h-3.5 w-3.5 sm:mr-1" />
-                                <span className="hidden sm:inline">Show</span>
-                              </>
-                            ) : (
-                              <>
-                                <EyeOff className="h-3.5 w-3.5 sm:mr-1" />
-                                <span className="hidden sm:inline">Hide</span>
-                              </>
-                            )}
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              toggleExport(d.device_id, d.can_export !== false);
-                            }}
-                            disabled={loading[`export-${d.device_id}`]}
-                            className="sm:h-6 sm:px-3 px-0 sm:w-auto w-6 text-[10px] font-medium rounded shrink-0 hover:bg-primary/15 hover:scale-105 transition-all"
-                            title={
-                              d.can_export === false
-                                ? "Allow exporting history"
-                                : "Block exporting history"
-                            }
-                          >
-                            {loading[`export-${d.device_id}`] ? (
-                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                            ) : d.can_export === false ? (
-                              <>
-                                <Download className="h-3.5 w-3.5 sm:mr-1" />
-                                <span className="hidden sm:inline">
-                                  Allow Export
-                                </span>
-                              </>
-                            ) : (
-                              <>
-                                <Ban className="h-3.5 w-3.5 sm:mr-1" />
-                                <span className="hidden sm:inline">
-                                  Block Export
-                                </span>
-                              </>
-                            )}
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              toggleDeleteItems(
-                                d.device_id,
-                                d.can_delete_items !== false
-                              );
-                            }}
-                            disabled={loading[`delete-${d.device_id}`]}
-                            className="sm:h-7 h-6 sm:px-3 px-0 sm:w-auto w-6 text-[10px] font-medium rounded shrink-0 hover:bg-primary/15 hover:scale-105 transition-all"
-                            title={
-                              d.can_delete_items === false
-                                ? "Allow deleting items"
-                                : "Block deleting items"
-                            }
-                          >
-                            {loading[`delete-${d.device_id}`] ? (
-                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                            ) : d.can_delete_items === false ? (
-                              <>
-                                <Trash2 className="h-3.5 w-3.5 sm:mr-1" />
-                                <span className="hidden sm:inline">
-                                  Allow Delete
-                                </span>
-                              </>
-                            ) : (
-                              <>
-                                <Ban className="h-3.5 w-3.5 sm:mr-1" />
-                                <span className="hidden sm:inline">
-                                  Block Delete
-                                </span>
-                              </>
-                            )}
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              kick(d.device_id);
-                            }}
-                            disabled={loading[d.device_id]}
-                            className="sm:h-7 h-6 sm:px-3 px-0 sm:w-auto w-6 text-[10px] font-medium rounded shrink-0 hover:bg-destructive/15 hover:scale-105 transition-all text-destructive"
-                            title="Remove device from session"
-                          >
-                            {loading[d.device_id] ? (
-                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                            ) : (
-                              <>
-                                <Trash2 className="h-3.5 w-3.5 sm:mr-1" />
-                                <span className="hidden sm:inline">Remove</span>
-                              </>
-                            )}
-                          </Button>
-                        </>
-                      )}
-
-                      {/* Leave Session Button for Current User */}
-                      {d.device_id === selfId && (
+                    <div className="flex items-center gap-1 shrink-0">
+                      {d.device_id === selfId ? (
                         <Button
                           size="sm"
                           variant="ghost"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            leaveSession(d.device_id, d.is_host || false);
-                          }}
+                          onClick={() => leaveSession(d.device_id, d.is_host || false)}
                           disabled={loading[`leave-${d.device_id}`]}
-                          className="sm:h-7 h-6 sm:px-3 px-0 sm:w-auto w-6 text-[10px] font-medium rounded shrink-0 hover:bg-destructive/15 hover:scale-105 transition-all text-destructive"
-                          title="Leave session"
+                          className="h-7 px-2 text-xs text-red-400 hover:text-red-300 hover:bg-red-500/10"
                         >
                           {loading[`leave-${d.device_id}`] ? (
                             <Loader2 className="h-3.5 w-3.5 animate-spin" />
                           ) : (
                             <>
                               <LogOut className="h-3.5 w-3.5 sm:mr-1" />
-                              <span className="hidden sm:inline">
-                                Leave Session
-                              </span>
+                              <span className="hidden sm:inline">Leave</span>
                             </>
                           )}
                         </Button>
-                      )}
+                      ) : isHost ? (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => kick(d.device_id)}
+                          disabled={loading[d.device_id]}
+                          className="h-7 px-2 text-xs text-zinc-400 hover:text-red-400 hover:bg-red-500/10"
+                        >
+                          {loading[d.device_id] ? (
+                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          ) : (
+                            <>
+                              <Trash2 className="h-3.5 w-3.5 sm:mr-1" />
+                              <span className="hidden sm:inline">Remove</span>
+                            </>
+                          )}
+                        </Button>
+                      ) : null}
 
-                      {/* Expand/Collapse Button */}
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={() => {
-                          const newExpanded = new Set(expandedDevices);
-                          if (isExpanded) {
-                            newExpanded.delete(d.device_id);
-                          } else {
-                            newExpanded.add(d.device_id);
-                          }
-                          setExpandedDevices(newExpanded);
-                        }}
-                        className="sm:h-7 sm:w-7 h-6 w-6 p-0 shrink-0 hover:bg-primary/10 rounded transition-all"
-                        title={isExpanded ? "Hide details" : "Show details"}
-                      >
-                        {isExpanded ? (
-                          <ChevronUp className="sm:h-3.5 sm:w-3.5 h-3 w-3" />
-                        ) : (
-                          <ChevronDown className="sm:h-3.5 sm:w-3.5 h-3 w-3" />
-                        )}
-                      </Button>
+                      {isHost && d.device_id !== selfId && (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => {
+                            const newExpanded = new Set(expandedDevices);
+                            if (isExpanded) {
+                              newExpanded.delete(d.device_id);
+                            } else {
+                              newExpanded.add(d.device_id);
+                            }
+                            setExpandedDevices(newExpanded);
+                          }}
+                          className="h-7 w-7 p-0 text-zinc-500 hover:text-zinc-300"
+                        >
+                          {isExpanded ? (
+                            <ChevronUp className="h-4 w-4" />
+                          ) : (
+                            <ChevronDown className="h-4 w-4" />
+                          )}
+                        </Button>
+                      )}
                     </div>
                   </div>
 
-                  {/* Expanded Metadata Section */}
-                  {isExpanded && (
-                    <div className="pt-2 border-t border-primary/10 space-y-2 animate-in slide-in-from-top-2 duration-200">
-                      <div className="grid grid-cols-1 gap-2 text-[10px]">
-                        {/* Device ID */}
-                        <div className="flex items-start justify-between gap-2 bg-muted/30 p-2 rounded">
-                          <div className="flex items-center gap-1.5 text-muted-foreground">
-                            <Info className="h-3 w-3 shrink-0" />
-                            <span className="font-medium">Device ID:</span>
-                          </div>
-                          <div className="flex items-center gap-1">
-                            <code className="text-foreground font-mono text-[9px] break-all">
-                              {d.device_id}
-                            </code>
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              onClick={() => {
-                                navigator.clipboard.writeText(d.device_id);
-                              }}
-                              className="h-4 w-4 p-0 hover:bg-primary/10"
-                              title="Copy Device ID"
-                            >
-                              <Copy className="h-2.5 w-2.5" />
-                            </Button>
-                          </div>
-                        </div>
+                  {isExpanded && isHost && d.device_id !== selfId && (
+                    <div className="mt-3 pt-3 border-t border-zinc-800 space-y-2">
+                      <div className="grid grid-cols-2 gap-2">
+                        <button
+                          onClick={() => toggleFreeze(d.device_id, d.is_frozen || false)}
+                          disabled={loading[`freeze-${d.device_id}`]}
+                          className={`flex items-center justify-center gap-2 px-3 py-2 rounded text-xs transition-colors ${
+                            d.is_frozen
+                              ? "bg-orange-500/20 text-orange-400 hover:bg-orange-500/30"
+                              : "bg-zinc-800 text-zinc-400 hover:bg-zinc-700"
+                          }`}
+                        >
+                          {loading[`freeze-${d.device_id}`] ? (
+                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          ) : d.is_frozen ? (
+                            <>
+                              <Play className="h-3.5 w-3.5" />
+                              Unfreeze
+                            </>
+                          ) : (
+                            <>
+                              <Snowflake className="h-3.5 w-3.5" />
+                              Freeze
+                            </>
+                          )}
+                        </button>
 
-                        {/* Last Seen */}
-                        <div className="flex items-start justify-between gap-2 bg-muted/30 p-2 rounded">
-                          <div className="flex items-center gap-1.5 text-muted-foreground">
-                            <Clock className="h-3 w-3 shrink-0" />
-                            <span className="font-medium">Last Seen:</span>
-                          </div>
-                          <span className="text-foreground text-right">
-                            {new Date(d.last_seen).toLocaleString()}
-                          </span>
-                        </div>
+                        <button
+                          onClick={() => toggleView(d.device_id, d.can_view !== false)}
+                          disabled={loading[`view-${d.device_id}`]}
+                          className={`flex items-center justify-center gap-2 px-3 py-2 rounded text-xs transition-colors ${
+                            d.can_view === false
+                              ? "bg-red-500/20 text-red-400 hover:bg-red-500/30"
+                              : "bg-zinc-800 text-zinc-400 hover:bg-zinc-700"
+                          }`}
+                        >
+                          {loading[`view-${d.device_id}`] ? (
+                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          ) : d.can_view === false ? (
+                            <>
+                              <Eye className="h-3.5 w-3.5" />
+                              Show
+                            </>
+                          ) : (
+                            <>
+                              <EyeOff className="h-3.5 w-3.5" />
+                              Hide
+                            </>
+                          )}
+                        </button>
 
-                        {/* Joined At */}
-                        <div className="flex items-start justify-between gap-2 bg-muted/30 p-2 rounded">
-                          <div className="flex items-center gap-1.5 text-muted-foreground">
-                            <Globe className="h-3 w-3 shrink-0" />
-                            <span className="font-medium">Joined:</span>
-                          </div>
-                          <span className="text-foreground text-right">
-                            {new Date(d.created_at).toLocaleString()}
-                          </span>
-                        </div>
+                        <button
+                          onClick={() => toggleExport(d.device_id, d.can_export !== false)}
+                          disabled={loading[`export-${d.device_id}`]}
+                          className={`flex items-center justify-center gap-2 px-3 py-2 rounded text-xs transition-colors ${
+                            d.can_export === false
+                              ? "bg-red-500/20 text-red-400 hover:bg-red-500/30"
+                              : "bg-zinc-800 text-zinc-400 hover:bg-zinc-700"
+                          }`}
+                        >
+                          {loading[`export-${d.device_id}`] ? (
+                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          ) : d.can_export === false ? (
+                            <>
+                              <Download className="h-3.5 w-3.5" />
+                              Allow Export
+                            </>
+                          ) : (
+                            <>
+                              <Ban className="h-3.5 w-3.5" />
+                              Block Export
+                            </>
+                          )}
+                        </button>
 
-                        {/* Permissions */}
-                        <div className="flex items-start justify-between gap-2 bg-muted/30 p-2 rounded">
-                          <div className="flex items-center gap-1.5 text-muted-foreground">
-                            <UserCheck className="h-3 w-3 shrink-0" />
-                            <span className="font-medium">Permissions:</span>
-                          </div>
-                          <div className="flex items-center gap-1 flex-wrap justify-end">
-                            <span
-                              className={`px-1.5 py-0.5 rounded ${d.can_view !== false ? "bg-green-500/15 text-green-400" : "bg-red-500/15 text-red-400"}`}
-                            >
-                              View: {d.can_view !== false ? "✓" : "✗"}
-                            </span>
-                            <span
-                              className={`px-1.5 py-0.5 rounded ${d.can_export !== false ? "bg-green-500/15 text-green-400" : "bg-red-500/15 text-red-400"}`}
-                            >
-                              Export: {d.can_export !== false ? "✓" : "✗"}
-                            </span>
-                            <span
-                              className={`px-1.5 py-0.5 rounded ${d.can_delete_items !== false ? "bg-green-500/15 text-green-400" : "bg-red-500/15 text-red-400"}`}
-                            >
-                              Delete: {d.can_delete_items !== false ? "✓" : "✗"}
-                            </span>
-                          </div>
-                        </div>
+                        <button
+                          onClick={() =>
+                            toggleDeleteItems(d.device_id, d.can_delete_items !== false)
+                          }
+                          disabled={loading[`delete-${d.device_id}`]}
+                          className={`flex items-center justify-center gap-2 px-3 py-2 rounded text-xs transition-colors ${
+                            d.can_delete_items === false
+                              ? "bg-red-500/20 text-red-400 hover:bg-red-500/30"
+                              : "bg-zinc-800 text-zinc-400 hover:bg-zinc-700"
+                          }`}
+                        >
+                          {loading[`delete-${d.device_id}`] ? (
+                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          ) : d.can_delete_items === false ? (
+                            <>
+                              <Trash2 className="h-3.5 w-3.5" />
+                              Allow Delete
+                            </>
+                          ) : (
+                            <>
+                              <Ban className="h-3.5 w-3.5" />
+                              Block Delete
+                            </>
+                          )}
+                        </button>
+                      </div>
+
+                      <div className="text-[10px] text-zinc-500 space-y-1 pt-2">
+                        <div>ID: {d.device_id.slice(0, 16)}...</div>
+                        <div>Joined: {new Date(d.created_at).toLocaleString()}</div>
                       </div>
                     </div>
                   )}
                 </div>
-              </li>
+              </div>
             );
           })}
           {devices.length === 0 && !error && (
-            <li className="text-center text-muted-foreground text-sm py-4">
+            <div className="text-center text-zinc-500 text-sm py-8">
               No devices connected yet.
-            </li>
+            </div>
           )}
-        </ul>
+        </div>
       </div>
 
-      {/* Host Transfer Dialog */}
       <Dialog open={showTransferHost} onOpenChange={setShowTransferHost}>
         <DialogContent>
           <DialogHeader>

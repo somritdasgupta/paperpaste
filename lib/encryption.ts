@@ -433,3 +433,47 @@ export function getDeviceMetadata(): object {
     timestamp: new Date().toISOString()
   };
 }
+
+// Generate a human-readable session fingerprint (Safety Number)
+export async function generateSessionFingerprint(sessionKey: CryptoKey): Promise<string> {
+  try {
+    // Export key to raw format
+    const exported = await crypto.subtle.exportKey("raw", sessionKey);
+    
+    // Hash the raw key material
+    const hashBuffer = await crypto.subtle.digest("SHA-256", exported);
+    
+    // Convert to byte array
+    const hashArray = Array.from(new Uint8Array(hashBuffer));
+    
+    // Take first 16 bytes (half of SHA-256 is enough for visual verification)
+    // and convert to groups of 5 digits for readability
+    // We'll use a simple modulo arithmetic to generate digits from bytes
+    // This is similar to how Signal/WhatsApp generate safety numbers
+    
+    let fingerprint = "";
+    for (let i = 0; i < 30; i += 5) { // Generate 6 groups of 5 digits
+      // Use 4 bytes for each 5-digit group to get uniform distribution
+      // We wrap around the hash array if needed
+      const startIndex = (i / 5) * 4;
+      const val = (hashArray[startIndex] << 24) | 
+                  (hashArray[startIndex + 1] << 16) | 
+                  (hashArray[startIndex + 2] << 8) | 
+                  hashArray[startIndex + 3];
+      
+      // Convert to unsigned 32-bit integer
+      const unsignedVal = val >>> 0;
+      
+      // Modulo 100000 to get 5 digits
+      const digits = (unsignedVal % 100000).toString().padStart(5, '0');
+      
+      if (i > 0) fingerprint += " ";
+      fingerprint += digits;
+    }
+    
+    return fingerprint;
+  } catch (error) {
+    console.error("Failed to generate session fingerprint:", error);
+    return "00000 00000 00000 00000 00000 00000";
+  }
+}

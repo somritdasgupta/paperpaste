@@ -1184,19 +1184,19 @@ export default function ClipboardInput({ code }: { code: string }) {
         />
       )}
 
-      {/* History Control Bar - Above input panel */}
+      {/* History Control Bar - Above input panel  */}
       <HistoryControlBar />
 
       <div
         className={`
-          bg-gradient-to-b from-background/95 to-background border-t border-primary/10 shadow-2xl
-          transition-all duration-300 ease-out backdrop-blur-xl
+          bg-slate-900/90 backdrop-blur-xl border-t border-slate-700/50 shadow-2xl
+          transition-all duration-300 ease-out
           ${isFocused ? "h-[70vh]" : "h-auto"}
         `}
       >
         <form onSubmit={submit} className="h-full flex flex-col">
           {/* Single Row: Fixed Tabs (Left) + Scrollable Formatting (Right) */}
-          <div className="shrink-0 px-3 py-2 border-b border-primary/10 bg-gradient-to-r from-primary/5 via-primary/3 to-transparent flex items-center gap-3">
+          <div className="shrink-0 px-3 py-2 border-b border-slate-700/50 bg-slate-800/50 flex items-center gap-3">
             {/* Left: Fixed Tab Buttons */}
             <div className="flex items-center gap-2 shrink-0">
               <Button
@@ -1556,7 +1556,14 @@ export default function ClipboardInput({ code }: { code: string }) {
                   value={text}
                   onFocus={() => setIsFocused(true)}
                   onChange={(e) => {
-                    setText(e.target.value);
+                    const newValue = e.target.value;
+                    // Mutual exclusivity: Clear the other type's content
+                    if (type === "text" && codeContent) {
+                      setCodeContent("");
+                    } else if (type === "code" && textContent) {
+                      setTextContent("");
+                    }
+                    setText(newValue);
                   }}
                   disabled={!canView || isFrozen}
                   onKeyDown={(e) => {
@@ -1599,8 +1606,8 @@ export default function ClipboardInput({ code }: { code: string }) {
                   className={`
                       flex-1 w-full resize-none border-0
                       focus:ring-0 focus:outline-none focus-visible:ring-0 focus-visible:ring-offset-0
-                      ${type === "code" ? "font-mono text-sm leading-[1.5]" : "text-base"}
-                      p-4 pb-14 bg-transparent
+                      ${type === "code" ? "font-mono text-xs leading-[1.4]" : "text-sm"}
+                      p-3 pb-12 bg-transparent
                       scrollbar-thin scrollbar-thumb-muted scrollbar-track-transparent
                     `}
                 />

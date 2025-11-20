@@ -16,7 +16,6 @@ export function Preloader() {
           setTimeout(() => setIsLoading(false), 300);
           return 100;
         }
-        // Random increment between 5-15 for realistic loading
         return Math.min(prev + Math.floor(Math.random() * 10) + 5, 100);
       });
     }, 100);
@@ -47,33 +46,7 @@ export function Preloader() {
           {/* Match homepage structure exactly */}
           <div className="relative z-10 w-full max-w-2xl mx-auto px-4 sm:px-6 lg:px-8 my-auto">
             <div className="w-full space-y-6 sm:space-y-8">
-              <div className="text-center space-y-4">
-                {/* Logo - Exact same as homepage */}
-                <motion.div
-                  initial={{ scale: 0.8, opacity: 0 }}
-                  animate={{ scale: 1, opacity: 1 }}
-                  transition={{
-                    duration: 0.5,
-                    ease: "easeOut",
-                  }}
-                  className="inline-flex items-center gap-3 mb-2"
-                >
-                  <motion.div
-                    className="p-2 rounded bg-primary/10 border border-primary/20"
-                    animate={{
-                      scale: [1, 1.05, 1],
-                    }}
-                    transition={{
-                      duration: 2,
-                      repeat: Infinity,
-                      ease: "easeInOut",
-                    }}
-                  >
-                    <div className="h-6 w-6 bg-primary rounded"></div>
-                  </motion.div>
-                </motion.div>
-
-                {/* PaperPaste Text - Exact same as homepage */}
+              <div className="text-center space-y-4">      
                 <motion.h1
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}

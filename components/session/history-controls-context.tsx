@@ -12,9 +12,14 @@ type HistoryControlsContextType = {
   autoRefreshEnabled: boolean;
   isRefreshing: boolean;
   autoRefreshInterval: number;
-  setConnectionStatus: (
-    status: "connecting" | "connected" | "disconnected"
-  ) => void;
+  deletionEnabled: boolean;
+  bottomSheet: {
+    isOpen: boolean;
+    view: "devices" | "qr" | "verification" | "delete-item" | "leave-session" | "kill-session" | null;
+    data?: any;
+  };
+  
+  setConnectionStatus: (status: "connecting" | "connected" | "disconnected") => void;
   setItemsCount: (count: number) => void;
   setExportEnabled: (enabled: boolean) => void;
   setCanExport: (can: boolean) => void;
@@ -22,9 +27,14 @@ type HistoryControlsContextType = {
   setAutoRefreshEnabled: (enabled: boolean) => void;
   setIsRefreshing: (refreshing: boolean) => void;
   setAutoRefreshInterval: (interval: number) => void;
+  setDeletionEnabled: (enabled: boolean) => void;
+  
   toggleAutoRefresh: () => void;
   handleManualRefresh: () => void;
   cycleTimeInterval: () => void;
+  
+  openBottomSheet: (view: HistoryControlsContextType["bottomSheet"]["view"], data?: any) => void;
+  closeBottomSheet: () => void;
 };
 
 const HistoryControlsContext = createContext<HistoryControlsContextType | null>(
@@ -48,6 +58,26 @@ export function HistoryControlsProvider({
   const [autoRefreshEnabled, setAutoRefreshEnabled] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [autoRefreshInterval, setAutoRefreshInterval] = useState(5000);
+  const [deletionEnabled, setDeletionEnabled] = useState(true);
+
+  // Bottom Sheet State
+  const [bottomSheet, setBottomSheet] = useState<HistoryControlsContextType["bottomSheet"]>({
+    isOpen: false,
+    view: null,
+    data: null,
+  });
+
+  const openBottomSheet = (view: HistoryControlsContextType["bottomSheet"]["view"], data?: any) => {
+    setBottomSheet({ isOpen: true, view, data });
+  };
+
+  const closeBottomSheet = () => {
+    setBottomSheet((prev) => ({ ...prev, isOpen: false }));
+    // Delay clearing view/data to allow animation to finish
+    setTimeout(() => {
+      setBottomSheet({ isOpen: false, view: null, data: null });
+    }, 300);
+  };
 
   const toggleAutoRefresh = () => {
     // Dispatch event to ItemsList to toggle its local state
@@ -76,6 +106,9 @@ export function HistoryControlsProvider({
         autoRefreshEnabled,
         isRefreshing,
         autoRefreshInterval,
+        deletionEnabled,
+        bottomSheet,
+        
         setConnectionStatus,
         setItemsCount,
         setExportEnabled,
@@ -84,9 +117,14 @@ export function HistoryControlsProvider({
         setAutoRefreshEnabled,
         setIsRefreshing,
         setAutoRefreshInterval,
+        setDeletionEnabled,
+        
         toggleAutoRefresh,
         handleManualRefresh,
         cycleTimeInterval,
+        
+        openBottomSheet,
+        closeBottomSheet,
       }}
     >
       {children}
