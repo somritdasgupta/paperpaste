@@ -17,7 +17,9 @@ BEGIN
     CREATE TABLE public.sessions (
       code text PRIMARY KEY,
       created_at timestamptz DEFAULT now(),
-      last_activity timestamptz DEFAULT now()
+      last_activity timestamptz DEFAULT now(),
+      export_enabled boolean DEFAULT true,
+      allow_item_deletion boolean DEFAULT true
     );
   END IF;
 
@@ -36,12 +38,39 @@ BEGIN
       last_seen timestamptz DEFAULT now(),
       is_frozen boolean DEFAULT false,
       can_view boolean DEFAULT true,
+      can_export boolean DEFAULT true,
+      can_delete_items boolean DEFAULT true,
       created_at timestamptz DEFAULT now()
     );
     CREATE INDEX IF NOT EXISTS idx_devices_session ON public.devices(session_code);
     CREATE INDEX IF NOT EXISTS idx_devices_device_id ON public.devices(device_id);
     ALTER TABLE public.devices ADD CONSTRAINT devices_session_device_unique UNIQUE(session_code, device_id);
   ELSE
+    -- Add missing columns to existing sessions table
+    BEGIN
+      -- Add export_enabled column if it doesn't exist
+      IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_name = 'sessions' AND column_name = 'export_enabled' AND table_schema = 'public'
+      ) THEN
+        ALTER TABLE public.sessions ADD COLUMN export_enabled boolean DEFAULT true;
+      END IF;
+
+      -- Add allow_item_deletion column if it doesn't exist
+      IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_name = 'sessions' AND column_name = 'allow_item_deletion' AND table_schema = 'public'
+      ) THEN
+        ALTER TABLE public.sessions ADD COLUMN allow_item_deletion boolean DEFAULT true;
+      END IF;
+    END;
+  END IF;
+
+  -- Add missing columns to existing devices table
+  IF EXISTS (
+    SELECT 1 FROM information_schema.tables 
+    WHERE table_schema='public' AND table_name='devices'
+  ) THEN
     -- Add missing columns to existing devices table
     BEGIN
       -- Add device_id column if it doesn't exist
@@ -75,6 +104,22 @@ BEGIN
         WHERE table_name = 'devices' AND column_name = 'device_metadata_encrypted' AND table_schema = 'public'
       ) THEN
         ALTER TABLE public.devices ADD COLUMN device_metadata_encrypted text;
+      END IF;
+
+      -- Add can_export column if it doesn't exist
+      IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_name = 'devices' AND column_name = 'can_export' AND table_schema = 'public'
+      ) THEN
+        ALTER TABLE public.devices ADD COLUMN can_export boolean DEFAULT true;
+      END IF;
+
+      -- Add can_delete_items column if it doesn't exist
+      IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_name = 'devices' AND column_name = 'can_delete_items' AND table_schema = 'public'
+      ) THEN
+        ALTER TABLE public.devices ADD COLUMN can_delete_items boolean DEFAULT true;
       END IF;
 
       -- Add unique constraint if it doesn't exist

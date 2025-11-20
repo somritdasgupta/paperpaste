@@ -57,7 +57,7 @@ export default function TextFormattingToolbar({
   ];
 
   return (
-    <div className="flex items-center gap-1 p-2 bg-muted/30 rounded border border-border">
+    <div className="flex items-center gap-1 p-1 bg-muted/30 rounded border border-border">
       <TooltipProvider>
         {formatButtons.map(({ icon: Icon, format, tooltip, wrapper }) => (
           <Tooltip key={format}>
@@ -65,12 +65,12 @@ export default function TextFormattingToolbar({
               <Button
                 type="button"
                 variant="ghost"
-                size="sm"
+                size="icon"
                 disabled={disabled}
                 onClick={() => onFormat(format, wrapper)}
-                className="h-8 w-8 p-0 hover:bg-primary/10"
+                className="h-6 w-6 p-0 hover:bg-primary/10"
               >
-                <Icon className="h-4 w-4" />
+                <Icon className="h-3.5 w-3.5" />
               </Button>
             </TooltipTrigger>
             <TooltipContent>

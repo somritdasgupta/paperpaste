@@ -25,6 +25,7 @@ import {
   Loader2,
   AlertTriangle,
   Globe,
+  QrCode as QrCodeIcon,
 } from "lucide-react";
 
 export default function PairingScreen({
@@ -314,21 +315,20 @@ export default function PairingScreen({
             {/* QR Code Section */}
             <div className="flex flex-col items-center space-y-4">
               <div className="relative">
-                <div className="absolute -inset-3 bg-primary/10 rounded blur-xl"></div>
-                <img
-                  src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(
-                    invite
-                  )}&bgcolor=FFFFFF&color=000000&margin=15`}
-                  alt="Session QR Code"
-                  width={200}
-                  height={200}
-                  className="relative rounded border-2 border-border shadow-lg"
-                />
-              </div>
-              <div className="w-full max-w-md p-3 bg-muted/50 rounded border text-center">
-                <p className="text-xs font-mono text-muted-foreground break-all">
-                  {invite}
-                </p>
+                <div className="bg-white p-6 rounded-lg border-2 border-zinc-200 dark:border-zinc-700 shadow-sm">
+                  <img
+                    src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(
+                      invite
+                    )}`}
+                    alt="Session QR Code"
+                    width={200}
+                    height={200}
+                    className="rounded"
+                  />
+                </div>
+                <div className="absolute -top-2 -right-2 bg-green-500 text-white p-2 rounded-full shadow-lg">
+                  <QrCodeIcon className="h-4 w-4" />
+                </div>
               </div>
             </div>
 

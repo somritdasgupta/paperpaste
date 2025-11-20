@@ -38,7 +38,7 @@ export default function QRCodePanel({ code }: QRCodePanelProps) {
   }
 
   return (
-    <div className="flex flex-col items-center gap-6 py-6 px-4">
+    <div className="flex flex-col items-center gap-4 py-6 px-4">
       {/* QR Code */}
       <div className="relative">
         <div className="bg-white p-6 rounded-lg border-2 border-zinc-200 shadow-sm">
@@ -67,18 +67,8 @@ export default function QRCodePanel({ code }: QRCodePanelProps) {
       {/* Invite Link */}
       <div className="w-full max-w-md space-y-3">
         <div className="text-center">
-          <h3 className="font-semibold text-base mb-1">Scan to Join Session</h3>
+          <h3 className="font-semibold text-base">Scan to Join Session</h3>
           <p className="text-xs text-zinc-500">Or share the link below</p>
-        </div>
-
-        <div className="bg-zinc-900/50 border border-zinc-800 rounded-lg p-3">
-          <div className="flex items-center gap-2 mb-2">
-            <LinkIcon className="h-3.5 w-3.5 text-zinc-500 shrink-0" />
-            <span className="text-[10px] font-medium text-zinc-500 uppercase tracking-wide">Invite Link</span>
-          </div>
-          <p className="text-xs font-mono text-zinc-300 break-all leading-relaxed">
-            {invite}
-          </p>
         </div>
 
         <Button 

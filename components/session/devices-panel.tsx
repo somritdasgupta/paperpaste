@@ -61,12 +61,14 @@ type Device = {
 export default function DevicesPanel({ code }: { code: string }) {
   const { 
     openBottomSheet, 
-    exportEnabled, 
-    setExportEnabled, 
-    deletionEnabled, 
-    setDeletionEnabled,
     setCanExport,
   } = useHistoryControls();
+  
+  // Local session permissions state (like device state)
+  const [sessionPerms, setSessionPerms] = useState({
+    export_enabled: true,
+    allow_item_deletion: true
+  });
   
   const supabase = getSupabaseBrowserWithCode(code);
   const [devices, setDevices] = useState<Device[]>([]);
@@ -84,6 +86,7 @@ export default function DevicesPanel({ code }: { code: string }) {
     null
   );
   const [redirectReason, setRedirectReason] = useState<string>("");
+  const [broadcastChannel, setBroadcastChannel] = useState<any>(null);
 
   // Initialize
   useEffect(() => {
@@ -105,8 +108,10 @@ export default function DevicesPanel({ code }: { code: string }) {
         .single();
 
       if (sessionData) {
-        setExportEnabled(sessionData.export_enabled ?? true);
-        setDeletionEnabled(sessionData.allow_item_deletion ?? true);
+        setSessionPerms({
+          export_enabled: sessionData.export_enabled ?? true,
+          allow_item_deletion: sessionData.allow_item_deletion ?? true
+        });
       }
 
       const { data, error } = await supabase
@@ -168,7 +173,7 @@ export default function DevicesPanel({ code }: { code: string }) {
     }
 
     const channel = supabase
-      .channel(`devices-panel-${code}`)
+      .channel(`view-permissions-${code}`)
       .on(
         "postgres_changes",
         {
@@ -193,30 +198,17 @@ export default function DevicesPanel({ code }: { code: string }) {
           // Real-time sync for export/deletion toggles
           if (payload.new) {
             const newData = payload.new as any;
-            if ('export_enabled' in newData) {
-              setExportEnabled(newData.export_enabled);
-            }
-            if ('allow_item_deletion' in newData) {
-              setDeletionEnabled(newData.allow_item_deletion);
-            }
+            setSessionPerms(prev => ({
+              ...prev,
+              ...(('export_enabled' in newData) && { export_enabled: newData.export_enabled ?? true }),
+              ...(('allow_item_deletion' in newData) && { allow_item_deletion: newData.allow_item_deletion ?? true })
+            }));
           }
         }
       )
-      .on(
-        "broadcast",
-        { event: "export_toggle" },
-        (payload: any) => {
-          setExportEnabled(payload.payload.export_enabled);
-        }
-      )
-      .on(
-        "broadcast",
-        { event: "deletion_toggle" },
-        (payload: any) => {
-          setDeletionEnabled(payload.payload.allow_item_deletion);
-        }
-      )
       .subscribe();
+      
+    setBroadcastChannel(channel);
       
     const unsubscribeGlobal = subscribeToGlobalRefresh(() => {
         fetchDevices();
@@ -295,6 +287,7 @@ export default function DevicesPanel({ code }: { code: string }) {
         throw error;
       }
       
+      // Instant broadcast for immediate UI update
       await supabase.channel(`view-permissions-${code}`).send({
         type: "broadcast",
         event: "permission_changed",
@@ -331,6 +324,7 @@ export default function DevicesPanel({ code }: { code: string }) {
         throw error;
       }
 
+      // Instant broadcast for immediate UI update
       await supabase.channel(`view-permissions-${code}`).send({
         type: "broadcast",
         event: "permission_changed",
@@ -480,12 +474,13 @@ export default function DevicesPanel({ code }: { code: string }) {
 
   const toggleGlobalExport = async () => {
     if (!supabase || !isHost) return;
+    
+    // Optimistic update (same pattern as freeze/hidden)
+    const newStatus = !sessionPerms.export_enabled;
+    setSessionPerms(prev => ({ ...prev, export_enabled: newStatus }));
+    setLoading((prev) => ({ ...prev, globalExport: true }));
 
     try {
-      const newStatus = !exportEnabled;
-      // Optimistic update for immediate feedback
-      setExportEnabled(newStatus);
-      
       const { error } = await supabase
         .from("sessions")
         .update({ export_enabled: newStatus })
@@ -493,29 +488,35 @@ export default function DevicesPanel({ code }: { code: string }) {
 
       if (error) {
         // Revert on error
-        setExportEnabled(!newStatus);
+        setSessionPerms(prev => ({ ...prev, export_enabled: !newStatus }));
         throw error;
       }
 
-      await supabase.channel(`sessions-${code}`).send({
-        type: "broadcast",
-        event: "export_toggle",
-        payload: { export_enabled: newStatus },
-      });
+      // Broadcast to all users and trigger local refresh
+      if (broadcastChannel) {
+        await broadcastChannel.send({
+          type: "broadcast",
+          event: "global_refresh",
+          payload: { reason: "export_toggle" },
+        });
+      }
+      triggerGlobalRefresh();
     } catch (e: any) {
-      console.error("Toggle export error:", e);
-      setError(e.message || "Failed to toggle export");
+      setError(e.message);
+    } finally {
+      setLoading((prev) => ({ ...prev, globalExport: false }));
     }
   };
 
   const toggleItemDeletion = async () => {
     if (!supabase || !isHost) return;
+    
+    // Optimistic update (same pattern as freeze/hidden)
+    const newStatus = !sessionPerms.allow_item_deletion;
+    setSessionPerms(prev => ({ ...prev, allow_item_deletion: newStatus }));
+    setLoading((prev) => ({ ...prev, globalDeletion: true }));
 
     try {
-      const newStatus = !deletionEnabled;
-      // Optimistic update for immediate feedback
-      setDeletionEnabled(newStatus);
-      
       const { error } = await supabase
         .from("sessions")
         .update({ allow_item_deletion: newStatus })
@@ -523,18 +524,23 @@ export default function DevicesPanel({ code }: { code: string }) {
 
       if (error) {
         // Revert on error
-        setDeletionEnabled(!newStatus);
+        setSessionPerms(prev => ({ ...prev, allow_item_deletion: !newStatus }));
         throw error;
       }
 
-      await supabase.channel(`sessions-${code}`).send({
-        type: "broadcast",
-        event: "deletion_toggle",
-        payload: { allow_item_deletion: newStatus },
-      });
+      // Broadcast to all users and trigger local refresh
+      if (broadcastChannel) {
+        await broadcastChannel.send({
+          type: "broadcast",
+          event: "global_refresh",
+          payload: { reason: "deletion_toggle" },
+        });
+      }
+      triggerGlobalRefresh();
     } catch (e: any) {
-      console.error("Toggle deletion error:", e);
-      setError(e.message || "Failed to toggle deletion");
+      setError(e.message);
+    } finally {
+      setLoading((prev) => ({ ...prev, globalDeletion: false }));
     }
   };
 
@@ -613,29 +619,39 @@ export default function DevicesPanel({ code }: { code: string }) {
               <div className="grid grid-cols-2 gap-2">
                 <button
                   onClick={toggleGlobalExport}
-                  className={`flex flex-col items-center gap-1.5 p-3 rounded border transition-all ${
-                    exportEnabled
+                  disabled={loading.globalExport}
+                  className={`flex flex-col items-center gap-1.5 p-3 rounded border transition-all disabled:opacity-50 ${
+                    sessionPerms.export_enabled
                       ? "bg-blue-500/10 border-blue-500/30 text-blue-600 dark:text-blue-400"
                       : "bg-slate-100 dark:bg-zinc-900 border-slate-300 dark:border-zinc-800 text-slate-600 dark:text-zinc-400"
                   }`}
                 >
-                  <Download className="h-4 w-4" />
+                  {loading.globalExport ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Download className="h-4 w-4" />
+                  )}
                   <span className="text-[11px] font-medium">
-                    {exportEnabled ? "Export ON" : "Export OFF"}
+                    {loading.globalExport ? "Updating..." : sessionPerms.export_enabled ? "Export ON" : "Export OFF"}
                   </span>
                 </button>
 
                 <button
                   onClick={toggleItemDeletion}
-                  className={`flex flex-col items-center gap-1.5 p-3 rounded border transition-all ${
-                    deletionEnabled
+                  disabled={loading.globalDeletion}
+                  className={`flex flex-col items-center gap-1.5 p-3 rounded border transition-all disabled:opacity-50 ${
+                    sessionPerms.allow_item_deletion
                       ? "bg-red-500/10 border-red-500/30 text-red-600 dark:text-red-400"
                       : "bg-slate-100 dark:bg-zinc-900 border-slate-300 dark:border-zinc-800 text-slate-600 dark:text-zinc-400"
                   }`}
                 >
-                  <Trash2 className="h-4 w-4" />
+                  {loading.globalDeletion ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Trash2 className="h-4 w-4" />
+                  )}
                   <span className="text-[11px] font-medium">
-                    {deletionEnabled ? "Delete ON" : "Delete OFF"}
+                    {loading.globalDeletion ? "Updating..." : sessionPerms.allow_item_deletion ? "Delete ON" : "Delete OFF"}
                   </span>
                 </button>
               </div>
@@ -724,18 +740,17 @@ export default function DevicesPanel({ code }: { code: string }) {
                         <Button
                           size="sm"
                           variant="ghost"
-                          onClick={() => leaveSession(d.device_id, d.is_host || false)}
-                          disabled={loading[`leave-${d.device_id}`]}
+                          onClick={() => {
+                            const otherDevices = devices.filter(dd => dd.device_id !== d.device_id);
+                            openBottomSheet("leave-session", {
+                              isHost: d.is_host || false,
+                              otherDevicesCount: otherDevices.length
+                            });
+                          }}
                           className="h-7 px-2 text-xs text-red-400 hover:text-red-300 hover:bg-red-500/10"
                         >
-                          {loading[`leave-${d.device_id}`] ? (
-                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                          ) : (
-                            <>
-                              <LogOut className="h-3.5 w-3.5 sm:mr-1" />
-                              <span className="hidden sm:inline">Leave</span>
-                            </>
-                          )}
+                          <LogOut className="h-3.5 w-3.5 sm:mr-1" />
+                          <span className="hidden sm:inline">Leave</span>
                         </Button>
                       ) : isHost ? (
                         <Button

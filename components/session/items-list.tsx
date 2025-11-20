@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { getSupabaseBrowserWithCode } from "@/lib/supabase/client";
@@ -87,11 +87,8 @@ export default function ItemsList({ code }: { code: string }) {
   const [items, setItems] = useState<Item[]>([]);
   const [canView, setCanView] = useState(true);
   const [isFrozen, setIsFrozen] = useState(false);
-  const [canExport, setCanExport] = useState(true);
-  const [exportEnabled, setExportEnabled] = useState(true);
-  const [canDeleteItems, setCanDeleteItems] = useState(true);
-  const [allowItemDeletion, setAllowItemDeletion] = useState(true);
   const [isHost, setIsHost] = useState(false);
+  const [permissions, setPermissions] = useState({ export: true, delete: true });
   const [sessionKey, setSessionKey] = useState<CryptoKey | null>(null);
   const [expandedItems, setExpandedItems] = useState<Set<string>>(new Set());
   const [devices, setDevices] = useState<Map<string, DeviceInfo>>(new Map());
@@ -104,6 +101,7 @@ export default function ItemsList({ code }: { code: string }) {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [autoRefreshEnabled, setAutoRefreshEnabled] = useState(true);
   const [autoRefreshInterval, setAutoRefreshInterval] = useState(5000);
+  const itemsRef = useRef<string>("");
 
   // Leaving state
   const [isLeaving, setIsLeaving] = useState(false);
@@ -125,31 +123,18 @@ export default function ItemsList({ code }: { code: string }) {
   useEffect(() => {
     controls.setConnectionStatus(connectionStatus);
     controls.setItemsCount(items.length);
-    controls.setExportEnabled(exportEnabled);
-    controls.setCanExport(canExport);
+    controls.setExportEnabled(permissions.export);
+    controls.setCanExport(permissions.export);
     controls.setIsHost(isHost);
     controls.setAutoRefreshEnabled(autoRefreshEnabled);
-    controls.setIsRefreshing(isRefreshing);
     controls.setAutoRefreshInterval(autoRefreshInterval);
-    controls.setDeletionEnabled(allowItemDeletion && canDeleteItems);
-  }, [
-    connectionStatus,
-    items.length,
-    exportEnabled,
-    canExport,
-    isHost,
-    autoRefreshEnabled,
-    isRefreshing,
-    autoRefreshInterval,
-    allowItemDeletion,
-    canDeleteItems,
-    controls,
-  ]);
+    controls.setDeletionEnabled(permissions.delete);
+  }, [connectionStatus, items.length, permissions, isHost, autoRefreshEnabled, autoRefreshInterval, controls]);
 
   // Listen for control bar events
   useEffect(() => {
     const handleManualRefresh = () => {
-      fetchAndDecryptItems(true);
+      fetchAndDecryptItems(false);
     };
 
     const handleToggleAutoRefresh = () => {
@@ -187,7 +172,7 @@ export default function ItemsList({ code }: { code: string }) {
     if (!autoRefreshEnabled || !supabase || !sessionKey) return;
 
     const refreshTimer = setInterval(() => {
-      fetchAndDecryptItems(true);
+      fetchAndDecryptItems(false);
     }, autoRefreshInterval);
 
     return () => clearInterval(refreshTimer);
@@ -375,7 +360,12 @@ export default function ItemsList({ code }: { code: string }) {
         })
       );
 
-      setItems(decryptedItems);
+      // Only update if items actually changed
+      const newItemsHash = JSON.stringify(decryptedItems.map(i => i.id + i.content?.substring(0, 50)));
+      if (itemsRef.current !== newItemsHash) {
+        itemsRef.current = newItemsHash;
+        setItems(decryptedItems);
+      }
       setConnectionStatus("connected");
     } catch (e: any) {
       console.error("Error fetching items:", e);
@@ -440,34 +430,25 @@ export default function ItemsList({ code }: { code: string }) {
       if (data) {
         setCanView(data.can_view !== false);
         setIsFrozen(data.is_frozen === true);
-        setCanExport(data.can_export !== false);
-        // Default to true if column doesn't exist yet
-        setCanDeleteItems(data.can_delete_items !== false);
         setIsHost(data.is_host === true);
-      } else if (error) {
-        console.warn("Could not fetch device permissions, using defaults:", error);
-        setCanDeleteItems(true);
       }
 
-      // Fetch session settings
-      const { data: sessionData, error: sessionError } = await supabase
-        .from("sessions")
-        .select("export_enabled, allow_item_deletion")
-        .eq("code", code)
-        .single();
+      // Get combined permissions
+      const [devicePerms, sessionPerms] = await Promise.all([
+        supabase.from("devices").select("can_export, can_delete_items").eq("session_code", code).eq("device_id", deviceId).single(),
+        supabase.from("sessions").select("export_enabled, allow_item_deletion").eq("code", code).single()
+      ]);
 
-      if (sessionData) {
-        setExportEnabled(sessionData.export_enabled !== false);
-        setAllowItemDeletion(sessionData.allow_item_deletion !== false);
-      } else if (sessionError) {
-        console.warn("Could not fetch session settings, using defaults:", sessionError);
-        setAllowItemDeletion(true);
-      }
+      setPermissions({
+        export: (sessionPerms.data?.export_enabled !== false),
+        delete: (devicePerms.data?.can_delete_items !== false) && (sessionPerms.data?.allow_item_deletion !== false)
+      });
     };
 
     checkViewPermission();
 
     // Subscribe to view permission changes
+    console.log('Items list subscribing to channel:', `view-permissions-${code}`);
     const viewChannel = supabase
       .channel(`view-permissions-${code}`)
       .on(
@@ -482,13 +463,10 @@ export default function ItemsList({ code }: { code: string }) {
           if (payload.new && payload.new.device_id === deviceId) {
             setCanView(payload.new.can_view !== false);
             setIsFrozen(payload.new.is_frozen === true);
-            setCanExport(payload.new.can_export !== false);
-            setCanDeleteItems(payload.new.can_delete_items !== false);
             setIsHost(payload.new.is_host === true);
+            setPermissions(prev => ({ ...prev, export: payload.new.can_export !== false, delete: payload.new.can_delete_items !== false }));
             fetchAndDecryptItems();
-            try {
-              triggerGlobalRefresh();
-            } catch {}
+            try { triggerGlobalRefresh(); } catch {}
           }
         }
       )
@@ -500,37 +478,30 @@ export default function ItemsList({ code }: { code: string }) {
           table: "sessions",
           filter: `code=eq.${code}`,
         },
-        (payload) => {
+        async (payload) => {
           if (payload.new) {
-            setExportEnabled(payload.new.export_enabled !== false);
-            setAllowItemDeletion(payload.new.allow_item_deletion !== false);
-            try {
-              triggerGlobalRefresh();
-            } catch {}
+            const devicePerms = await supabase.from("devices").select("can_export, can_delete_items").eq("session_code", code).eq("device_id", deviceId).single();
+            setPermissions({
+              export: (devicePerms.data?.can_export !== false) && (payload.new.export_enabled !== false),
+              delete: (devicePerms.data?.can_delete_items !== false) && (payload.new.allow_item_deletion !== false)
+            });
+            try { triggerGlobalRefresh(); } catch {}
           }
         }
       )
       .on("broadcast", { event: "export_toggle" }, (payload) => {
-        setExportEnabled(payload.payload.export_enabled !== false);
-        try {
-          triggerGlobalRefresh();
-        } catch {}
+        console.log('Export toggle received:', payload);
+        setPermissions(prev => ({ ...prev, export: payload.payload.export_enabled !== false }));
       })
       .on("broadcast", { event: "deletion_toggle" }, (payload) => {
-        setAllowItemDeletion(payload.payload.allow_item_deletion !== false);
-        try {
-          triggerGlobalRefresh();
-        } catch {}
+        console.log('Deletion toggle received:', payload);
+        setPermissions(prev => ({ ...prev, delete: payload.payload.allow_item_deletion !== false }));
       })
       .on("broadcast", { event: "permission_changed" }, (payload) => {
         if (payload.payload.device_id === deviceId) {
           setCanView(payload.payload.can_view !== false);
           setIsFrozen(payload.payload.is_frozen === true);
-          setCanDeleteItems(payload.payload.can_delete_items !== false);
-          setCanExport(payload.payload.can_export !== false);
-          try {
-            triggerGlobalRefresh();
-          } catch {}
+          setPermissions(prev => ({ ...prev, export: payload.payload.can_export !== false, delete: payload.payload.can_delete_items !== false }));
         }
       })
       .on("broadcast", { event: "device_kicked" }, (payload) => {
@@ -541,7 +512,15 @@ export default function ItemsList({ code }: { code: string }) {
           setIsLeaving(true);
         }
       })
-      .subscribe();
+      .on("broadcast", { event: "global_refresh" }, () => {
+        // Trigger global refresh for all users
+        try {
+          triggerGlobalRefresh();
+        } catch {}
+      })
+      .subscribe((status) => {
+        console.log('Items list channel status:', status);
+      });
 
     return () => {
       supabase.removeChannel(viewChannel);
@@ -551,9 +530,21 @@ export default function ItemsList({ code }: { code: string }) {
   // Subscribe to items and devices changes
   useEffect(() => {
     if (!supabase || !sessionKey) return;
-    
+
     const unsubscribeRefresh = subscribeToGlobalRefresh(() => {
       fetchAndDecryptItems();
+      // Also refetch permissions
+      if (supabase && deviceId) {
+        Promise.all([
+          supabase.from("devices").select("can_export, can_delete_items").eq("session_code", code).eq("device_id", deviceId).single(),
+          supabase.from("sessions").select("export_enabled, allow_item_deletion").eq("code", code).single()
+        ]).then(([devicePerms, sessionPerms]) => {
+          setPermissions({
+            export: (devicePerms.data?.can_export !== false) && (sessionPerms.data?.export_enabled !== false),
+            delete: (devicePerms.data?.can_delete_items !== false) && (sessionPerms.data?.allow_item_deletion !== false)
+          });
+        });
+      }
     });
 
     // Subscribe to device changes
@@ -657,7 +648,8 @@ export default function ItemsList({ code }: { code: string }) {
 
   const getContentIcon = (kind: string, mimeType?: string) => {
     if (kind === "file") {
-      if (mimeType?.startsWith("image/")) return <ImageIcon className="h-4 w-4" />;
+      if (mimeType?.startsWith("image/"))
+        return <ImageIcon className="h-4 w-4" />;
       return <FileText className="h-4 w-4" />;
     }
     if (kind === "code") return <Code className="h-4 w-4" />;
@@ -667,7 +659,7 @@ export default function ItemsList({ code }: { code: string }) {
   if (!supabase) return null;
 
   return (
-    <div className="w-full h-full flex flex-col relative">
+    <div className="w-full h-full overflow-hidden">
       {/* Masked Overlay for hidden/frozen states */}
       {(!canView || isFrozen) && (
         <MaskedOverlay variant={!canView ? "hidden" : "frozen"} />
@@ -676,196 +668,213 @@ export default function ItemsList({ code }: { code: string }) {
       {/* Leaving Countdown */}
       {isLeaving && <LeavingCountdown reason={leaveReason} />}
 
-      {/* Terminal Header - Fixed/Sticky */}
-      <div className="sticky top-0 z-10 flex items-center justify-between px-4 py-2 bg-white/80 dark:bg-zinc-900/80 backdrop-blur-md border-b border-gray-300 dark:border-zinc-800 text-gray-700 dark:text-zinc-400 text-xs shadow-sm">
-        <div className="flex items-center gap-2">
-          <Terminal className="h-3 w-3" />
-          <span className="font-medium">session@{code}:~/history</span>
-        </div>
-        <div className="flex items-center gap-2">
-          <span className="font-medium">{items.length} items</span>
-          <div className={`w-2 h-2 rounded-full ${connectionStatus === 'connected' ? 'bg-green-500' : 'bg-red-500'}`} />
+      {items.length === 0 ? <EmptyState /> : <ItemsContent />}
+    </div>
+  );
+
+  function EmptyState() {
+    return (
+      <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-gray-50 to-gray-100 dark:from-slate-900/50 dark:to-slate-950/50" style={{overflow: 'hidden'}}>
+        <div className="text-center px-4 -mt-12 animate-in fade-in duration-1000">
+          <h1 className="text-5xl sm:text-6xl md:text-7xl lg:text-8xl font-bold text-gray-200/30 dark:text-zinc-800/30 select-none">PaperPaste</h1>
+          <p className="text-xs sm:text-sm md:text-base lg:text-lg text-gray-400/50 dark:text-zinc-700/50 mt-2 text-right">by @somritdasgupta</p>
         </div>
       </div>
+    );
+  }
 
-      {/* Terminal Content Area */}
-      <div className="flex-1 overflow-y-auto p-2 space-y-1 bg-gradient-to-br from-gray-50 to-gray-100 dark:from-slate-900/50 dark:to-slate-950/50 text-sm text-gray-900 dark:text-zinc-300 scrollbar-thin scrollbar-thumb-gray-400 dark:scrollbar-thumb-zinc-700 scrollbar-track-transparent">
-        {items.length === 0 ? (
-          <div className="text-gray-500 dark:text-zinc-500 italic p-8 text-center flex flex-col items-center justify-center h-full">
-            <Terminal className="h-8 w-8 mb-2 opacity-20" />
-            <p>No history items found.</p>
-            <p className="text-xs mt-1">Waiting for input...</p>
-          </div>
-        ) : (
-          items.map((item) => {
-            const isExpanded = expandedItems.has(item.id);
-            const isCopied = copiedItems.has(item.id);
-            const timestamp = item.display_created_at
-              ? item.display_created_at.toLocaleTimeString([], {
-                  hour: "2-digit",
-                  minute: "2-digit",
-                  second: "2-digit",
-                })
-              : new Date(item.created_at).toLocaleTimeString();
+  function ItemsContent() {
+    return (
+      <div className="w-full h-full overflow-y-auto bg-gradient-to-br from-gray-50 to-gray-100 dark:from-slate-900/50 dark:to-slate-950/50 scrollbar-thin scrollbar-thumb-gray-400 dark:scrollbar-thumb-zinc-700 scrollbar-track-transparent">
+        <div className="p-2 space-y-1">
+        {items.map((item) => {
+              const isExpanded = expandedItems.has(item.id);
+              const isCopied = copiedItems.has(item.id);
+              const timestamp = item.display_created_at
+                ? item.display_created_at.toLocaleTimeString([], {
+                    hour: "2-digit",
+                    minute: "2-digit",
+                    second: "2-digit",
+                  })
+                : new Date(item.created_at).toLocaleTimeString();
 
-
-            return (
-              <div
-                key={item.id}
-                className={`group relative border transition-all duration-200 ${
-                  isExpanded 
-                    ? "border-gray-300 dark:border-zinc-700 bg-white/90 dark:bg-zinc-900/40 backdrop-blur-sm pb-3 shadow-md dark:shadow-none" 
-                    : "border-gray-200/50 dark:border-zinc-800/30 bg-white/50 dark:bg-zinc-900/20 backdrop-blur-sm hover:bg-white/80 dark:hover:bg-zinc-900/30"
-                }`}
-              >
-                <div className="flex items-center gap-2 p-2 px-3 h-10">
-                  {/* Expand Toggle */}
-                  <button
-                    onClick={() => toggleExpanded(item.id)}
-                    className="text-gray-500 dark:text-zinc-500 hover:text-gray-900 dark:hover:text-zinc-200 shrink-0 transition-colors"
-                  >
-                    {isExpanded ? (
-                      <ChevronDown className="h-4 w-4" />
-                    ) : (
-                      <ChevronRight className="h-4 w-4" />
-                    )}
-                  </button>
-
-                  {/* Metadata */}
-                  <span className="text-gray-600 dark:text-zinc-500 text-[10px] shrink-0 font-medium">
-                    {timestamp}
-                  </span>
-                  <span className="text-blue-700 dark:text-blue-400 font-semibold text-xs shrink-0">
-                    {item.device_name || "unknown"}
-                  </span>
-
-                  {/* Collapsed Content Preview */}
-                  {!isExpanded && (
-                    <>
-                      <span className="text-gray-500 dark:text-zinc-600 text-xs shrink-0">:</span>
-                      <div className="flex-1 min-w-0 truncate text-gray-900 dark:text-zinc-300 text-sm font-medium">
-                        {item.kind === "file" ? (
-                          <span className="flex items-center gap-1.5">
-                            {getContentIcon("file", item.file_mime_type)}
-                            {item.file_name}
-                          </span>
-                        ) : (
-                          item.content?.replace(/\n/g, " ")
-                        )}
-                      </div>
-                    </>
-                  )}
-
-                  {/* Actions - Pushed to right */}
-                  <div
-                    className={`flex items-center gap-1 ml-auto shrink-0 transition-opacity duration-200 ${
-                      isExpanded || isCopied
-                        ? "opacity-100"
-                        : "opacity-0 group-hover:opacity-100"
-                    }`}
-                  >
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-6 w-6 text-gray-700 dark:text-zinc-400 hover:text-gray-900 dark:hover:text-zinc-100 hover:bg-gray-200/80 dark:hover:bg-zinc-800"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        copyToClipboard(item.content || "", item.id);
-                      }}
-                      title="Copy content"
+              return (
+                <div
+                  key={item.id}
+                  className={`group relative border backdrop-blur-md overflow-hidden hover:scale-[1.01] transition-transform ${
+                    isExpanded
+                      ? "border-white/20 dark:border-white/10 bg-white/10 dark:bg-white/5 pb-3 shadow-lg shadow-black/5 dark:shadow-black/20"
+                      : "border-white/10 dark:border-white/5 bg-white/5 dark:bg-white/3 hover:bg-white/15 dark:hover:bg-white/8 shadow-sm shadow-black/5"
+                  }`}
+                >
+                  <div className="flex items-center gap-2 p-2 px-3 h-10">
+                    {/* Expand Toggle */}
+                    <button
+                      onClick={() => toggleExpanded(item.id)}
+                      className="text-gray-500 dark:text-zinc-500 hover:text-gray-900 dark:hover:text-zinc-200 shrink-0 transition-colors"
                     >
-                      {isCopied ? (
-                        <Check className="h-3.5 w-3.5 text-green-500" />
+                      {isExpanded ? (
+                        <ChevronDown className="h-4 w-4" />
                       ) : (
-                        <Copy className="h-3.5 w-3.5" />
+                        <ChevronRight className="h-4 w-4" />
                       )}
-                    </Button>
+                    </button>
 
-                    {item.kind === "file" && item.file_download_url && (
-                      <a
-                        href={item.file_download_url}
-                        download={item.file_name}
-                        className="inline-flex items-center justify-center h-6 w-6 text-zinc-500 hover:text-zinc-100 hover:bg-zinc-800 rounded-md"
-                        title="Download file"
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        <Download className="h-3.5 w-3.5" />
-                      </a>
+                    {/* Metadata */}
+                    <span className="text-gray-500 dark:text-zinc-600 text-[9px] shrink-0 font-bold">
+                      {timestamp}
+                    </span>
+                    <span className="text-blue-600 dark:text-blue-500 text-[9px] shrink-0 font-bold">
+                      {item.device_name || "unknown"}
+                    </span>
+
+                    {/* Collapsed Content Preview */}
+                    {!isExpanded && (
+                      <>
+                        <span className="text-gray-500 dark:text-zinc-600 text-xs shrink-0">
+                          :
+                        </span>
+                        <div className="flex-1 min-w-0 truncate text-gray-900 dark:text-zinc-300 text-sm font-medium">
+                          {item.kind === "file" ? (
+                            <span className="flex items-center gap-1.5">
+                              {getContentIcon("file", item.file_mime_type)}
+                              {item.file_name}
+                            </span>
+                          ) : (
+                            item.content?.replace(/\n/g, " ")
+                          )}
+                        </div>
+                      </>
                     )}
 
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-6 w-6 text-zinc-500 hover:text-green-400 hover:bg-zinc-800"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        openBottomSheet("verification", {
-                          isItemVerification: true,
-                          itemType: item.kind,
-                          sessionKey,
-                        });
-                      }}
-                      title="Verify Integrity"
-                    >
-                      <ShieldCheck className="h-3.5 w-3.5" />
-                    </Button>
-
-                    {allowItemDeletion && canDeleteItems && (
+                    {/* Actions - Pushed to right */}
+                    <div className="flex items-center gap-1 ml-auto shrink-0">
                       <Button
                         variant="ghost"
                         size="icon"
-                        className="h-6 w-6 text-zinc-500 hover:text-red-400 hover:bg-zinc-800"
+                        className="h-6 w-6 text-gray-700 dark:text-zinc-400 hover:text-gray-900 dark:hover:text-zinc-100 hover:bg-gray-200/80 dark:hover:bg-zinc-800 hover:scale-110 transition-transform"
                         onClick={(e) => {
                           e.stopPropagation();
-                          openBottomSheet("delete-item", { itemId: item.id });
+                          copyToClipboard(item.content || "", item.id);
                         }}
-                        title="Delete item"
+                        title="Copy content"
                       >
-                        <Trash2 className="h-3.5 w-3.5" />
+                        {isCopied ? (
+                          <Check className="h-3.5 w-3.5 text-green-500 animate-in zoom-in" />
+                        ) : (
+                          <Copy className="h-3.5 w-3.5" />
+                        )}
                       </Button>
-                    )}
-                  </div>
-                </div>
 
-                {/* Expanded Content */}
-                {isExpanded && (
-                  <div className="px-3 pl-9 mt-2">
-                    <div className="bg-zinc-900/30 rounded border border-zinc-800">
-                      <div className="max-h-96 overflow-y-auto p-4 scrollbar-thin scrollbar-thumb-zinc-700">
-                        {item.kind === "text" && (
-                          <div className="text-sm leading-relaxed text-zinc-200 whitespace-pre-wrap break-words">
-                            {item.content}
-                          </div>
-                        )}
-                        {item.kind === "code" && (
-                          <pre className="text-xs text-zinc-200 whitespace-pre-wrap break-words font-mono leading-relaxed">
-                            <code>{item.content}</code>
-                          </pre>
-                        )}
-                        {item.kind === "file" && (
-                          <div className="flex items-start gap-4 p-3 bg-zinc-900/50 rounded border border-zinc-800">
-                            <div className="p-3 bg-zinc-950 rounded text-zinc-400">
-                              {getContentIcon("file", item.file_mime_type)}
-                            </div>
-                            <div className="flex-1">
-                              <p className="font-medium text-zinc-200 mb-1">
-                                {item.file_name}
-                              </p>
-                              <p className="text-xs text-zinc-500">
-                                {Math.round((item.file_size || 0) / 1024)} KB • {item.file_mime_type}
-                              </p>
-                            </div>
-                          </div>
-                        )}
-                      </div>
+                      {permissions.export && (
+                        item.kind === "file" && item.file_download_url ? (
+                          <a
+                            href={item.file_download_url}
+                            download={item.file_name}
+                            className="inline-flex items-center justify-center h-6 w-6 text-zinc-500 hover:text-zinc-100 hover:bg-zinc-800 rounded-md hover:scale-110 transition-transform"
+                            title="Download file"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <Download className="h-3.5 w-3.5" />
+                          </a>
+                        ) : (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-6 w-6 text-zinc-500 hover:text-zinc-100 hover:bg-zinc-800 hover:scale-110 transition-transform"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              const blob = new Blob([item.content || ''], { type: 'text/plain' });
+                              const url = URL.createObjectURL(blob);
+                              const a = document.createElement('a');
+                              a.href = url;
+                              a.download = `${item.kind}-${item.id.substring(0, 8)}.txt`;
+                              a.click();
+                              URL.revokeObjectURL(url);
+                            }}
+                            title="Download as text"
+                          >
+                            <Download className="h-3.5 w-3.5" />
+                          </Button>
+                        )
+                      )}
+
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-6 w-6 text-zinc-500 hover:text-green-400 hover:bg-zinc-800 hover:scale-110 transition-transform"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          openBottomSheet("verification", {
+                            isItemVerification: true,
+                            itemType: item.kind,
+                            sessionKey,
+                          });
+                        }}
+                        title="Verify Integrity"
+                      >
+                        <ShieldCheck className="h-3.5 w-3.5" />
+                      </Button>
+
+                      {permissions.delete && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-6 w-6 text-zinc-500 hover:text-red-400 hover:bg-zinc-800 hover:scale-110 transition-transform"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openBottomSheet("delete-item", { itemId: item.id });
+                          }}
+                          title="Delete item"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      )}
                     </div>
                   </div>
-                )}
-              </div>
-            );
-          })
-        )}
+
+                  {/* Expanded Content */}
+                  {isExpanded && (
+                    <div className="px-3 pl-9 mt-2">
+                      <div className="bg-zinc-900/30 rounded border border-zinc-800">
+                        <div className="max-h-96 overflow-y-auto p-4 scrollbar-thin scrollbar-thumb-zinc-700">
+                          {item.kind === "text" && (
+                            <div className="text-sm leading-relaxed text-zinc-200 whitespace-pre-wrap break-words">
+                              {item.content}
+                            </div>
+                          )}
+                          {item.kind === "code" && (
+                            <pre className="text-xs text-zinc-200 whitespace-pre-wrap break-words font-mono leading-relaxed">
+                              <code>{item.content}</code>
+                            </pre>
+                          )}
+                          {item.kind === "file" && (
+                            <div className="flex items-start gap-4 p-3 bg-zinc-900/50 rounded border border-zinc-800">
+                              <div className="p-3 bg-zinc-950 rounded text-zinc-400">
+                                {getContentIcon("file", item.file_mime_type)}
+                              </div>
+                              <div className="flex-1">
+                                <p className="font-medium text-zinc-200 mb-1">
+                                  {item.file_name}
+                                </p>
+                                <p className="text-xs text-zinc-500">
+                                  {item.file_size && item.file_size > 1024 * 1024 
+                                    ? `${(item.file_size / (1024 * 1024)).toFixed(2)} MB`
+                                    : `${Math.round((item.file_size || 0) / 1024)} KB`}
+                                  • {item.file_mime_type}
+                                </p>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+        })}
+        </div>
       </div>
-    </div>
-  );
+    );
+  }
 }

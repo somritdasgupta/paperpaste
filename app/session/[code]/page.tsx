@@ -57,7 +57,7 @@ export default function SessionPage({ params }: Props) {
 
   return (
     <HistoryControlsProvider sessionCode={code}>
-      <main className="relative flex flex-col h-screen w-full bg-gradient-to-br from-slate-50 via-blue-50/30 to-slate-100 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950 overflow-hidden">
+      <main className="relative flex flex-col h-screen w-full bg-gradient-to-br from-slate-50 via-blue-50/30 to-slate-100 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950 overflow-hidden" style={{overflow: 'hidden'}}>
         {/* Grid Background Pattern */}
         <div className="absolute inset-0 pointer-events-none overflow-hidden z-0">
           <div className="absolute inset-0 bg-[linear-gradient(to_right,#cbd5e120_1px,transparent_1px),linear-gradient(to_bottom,#cbd5e120_1px,transparent_1px)] dark:bg-[linear-gradient(to_right,#1e293b20_1px,transparent_1px),linear-gradient(to_bottom,#1e293b20_1px,transparent_1px)] bg-[size:3rem_3rem]"></div>
@@ -70,8 +70,8 @@ export default function SessionPage({ params }: Props) {
           </div>
         </div>
 
-        {/* History section - Takes full height with top padding for fixed header and bottom padding for input */}
-        <section className="relative z-10 flex-1 overflow-visible pt-16 pb-20">
+        {/* Main content area - absolute positioning */}
+        <div className="absolute top-0 bottom-0 left-0 right-0 z-10 overflow-hidden pt-16 pb-[120px]">
           <Suspense
             fallback={
               <div className="p-4 text-sm text-muted-foreground animate-pulse">
@@ -81,7 +81,7 @@ export default function SessionPage({ params }: Props) {
           >
             <ItemsList code={code} />
           </Suspense>
-        </section>
+        </div>
 
         {/* Input section - Fixed at bottom (handled by ClipboardInput component) */}
         <ClipboardInput code={code} />

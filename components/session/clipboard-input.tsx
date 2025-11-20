@@ -49,6 +49,11 @@ import {
   Pause,
   Play,
   Timer,
+  Eye,
+  Copy,
+  Check,
+  AlertTriangle,
+  Eraser,
 } from "lucide-react";
 import MaskedOverlay from "@/components/ui/masked-overlay";
 import { triggerGlobalRefresh } from "@/lib/globalRefresh";
@@ -139,41 +144,96 @@ const LANGUAGE_COMMENTS: Record<
   { line: string; block?: { start: string; end: string } }
 > = {
   // JavaScript ecosystem
-  javascript: { line: "//" },
-  typescript: { line: "//" },
-  jsx: { line: "//" },
-  tsx: { line: "//" },
+  javascript: { line: "//", block: { start: "/*", end: "*/" } },
+  typescript: { line: "//", block: { start: "/*", end: "*/" } },
+  jsx: { line: "//", block: { start: "/*", end: "*/" } },
+  tsx: { line: "//", block: { start: "/*", end: "*/" } },
+  json: { line: "//" },
 
   // Backend languages
-  python: { line: "#" },
+  python: { line: "#", block: { start: '"""', end: '"""' } },
   java: { line: "//", block: { start: "/*", end: "*/" } },
   go: { line: "//", block: { start: "/*", end: "*/" } },
   rust: { line: "//", block: { start: "/*", end: "*/" } },
   php: { line: "//", block: { start: "/*", end: "*/" } },
+  lua: { line: "--", block: { start: "--[[", end: "]]" } },
+  r: { line: "#" },
+  dart: { line: "//", block: { start: "/*", end: "*/" } },
+  elixir: { line: "#" },
+  erlang: { line: "%" },
+  clojure: { line: ";" },
+  lisp: { line: ";" },
+  scheme: { line: ";" },
+  ocaml: { line: "(*", block: { start: "(*", end: "*)" } },
+  fsharp: { line: "//", block: { start: "(*", end: "*)" } },
+  nim: { line: "#", block: { start: "#[", end: "]#" } },
+  zig: { line: "//" },
+  v: { line: "//", block: { start: "/*", end: "*/" } },
 
   // Systems programming
   c: { line: "//", block: { start: "/*", end: "*/" } },
   cpp: { line: "//", block: { start: "/*", end: "*/" } },
   csharp: { line: "//", block: { start: "/*", end: "*/" } },
+  objectivec: { line: "//", block: { start: "/*", end: "*/" } },
+  d: { line: "//", block: { start: "/*", end: "*/" } },
 
   // Scripting languages
   bash: { line: "#" },
   zsh: { line: "#" },
-  powershell: { line: "#" },
+  powershell: { line: "#", block: { start: "<#", end: "#>" } },
   shell: { line: "#" },
-  ruby: { line: "#" },
-  perl: { line: "#" },
+  ruby: { line: "#", block: { start: "=begin", end: "=end" } },
+  perl: { line: "#", block: { start: "=pod", end: "=cut" } },
+  tcl: { line: "#" },
+  awk: { line: "#" },
 
   // Database
   sql: { line: "--", block: { start: "/*", end: "*/" } },
+  plsql: { line: "--", block: { start: "/*", end: "*/" } },
+  tsql: { line: "--", block: { start: "/*", end: "*/" } },
 
   // Web
   html: { line: "<!--", block: { start: "<!--", end: "-->" } },
   css: { line: "/*", block: { start: "/*", end: "*/" } },
+  xml: { line: "<!--", block: { start: "<!--", end: "-->" } },
+  scss: { line: "//", block: { start: "/*", end: "*/" } },
+  sass: { line: "//" },
+  less: { line: "//", block: { start: "/*", end: "*/" } },
+  vue: { line: "//", block: { start: "/*", end: "*/" } },
+  svelte: { line: "//", block: { start: "/*", end: "*/" } },
 
-  // Other
+  // Mobile
   swift: { line: "//", block: { start: "/*", end: "*/" } },
   kotlin: { line: "//", block: { start: "/*", end: "*/" } },
+
+  // JVM languages
+  scala: { line: "//", block: { start: "/*", end: "*/" } },
+  groovy: { line: "//", block: { start: "/*", end: "*/" } },
+
+  // Functional
+  haskell: { line: "--", block: { start: "{-", end: "-}" } },
+  elm: { line: "--", block: { start: "{-", end: "-}" } },
+  purescript: { line: "--", block: { start: "{-", end: "-}" } },
+
+  // Scientific
+  matlab: { line: "%", block: { start: "%{", end: "%}" } },
+  julia: { line: "#", block: { start: "#=", end: "=#" } },
+  fortran: { line: "!" },
+
+  // Config
+  yaml: { line: "#" },
+  toml: { line: "#" },
+  ini: { line: ";" },
+  conf: { line: "#" },
+  properties: { line: "#" },
+
+  // Other
+  verilog: { line: "//", block: { start: "/*", end: "*/" } },
+  vhdl: { line: "--" },
+  assembly: { line: ";" },
+  asm: { line: ";" },
+  latex: { line: "%" },
+  markdown: { line: "<!--", block: { start: "<!--", end: "-->" } },
 };
 
 // Detect language from code content
@@ -184,69 +244,117 @@ const detectLanguage = (code: string): string => {
   const firstLine = lines[0]?.trim().toLowerCase() || "";
 
   // Shebang detection
-  if (firstLine.startsWith("#!/bin/bash") || firstLine.startsWith("#!/bin/sh"))
-    return "bash";
+  if (firstLine.startsWith("#!/bin/bash") || firstLine.startsWith("#!/bin/sh")) return "bash";
   if (firstLine.startsWith("#!/bin/zsh")) return "zsh";
-  if (
-    firstLine.startsWith("#!/usr/bin/python") ||
-    firstLine.startsWith("#!/usr/bin/env python")
-  )
-    return "python";
-  if (
-    firstLine.startsWith("#!/usr/bin/ruby") ||
-    firstLine.startsWith("#!/usr/bin/env ruby")
-  )
-    return "ruby";
-  if (
-    firstLine.startsWith("#!/usr/bin/perl") ||
-    firstLine.startsWith("#!/usr/bin/env perl")
-  )
-    return "perl";
-  if (
-    firstLine.startsWith("#!/usr/bin/env pwsh") ||
-    firstLine.startsWith("#!/usr/bin/pwsh")
-  )
-    return "powershell";
+  if (firstLine.startsWith("#!/usr/bin/python") || firstLine.startsWith("#!/usr/bin/env python")) return "python";
+  if (firstLine.startsWith("#!/usr/bin/ruby") || firstLine.startsWith("#!/usr/bin/env ruby")) return "ruby";
+  if (firstLine.startsWith("#!/usr/bin/perl") || firstLine.startsWith("#!/usr/bin/env perl")) return "perl";
+  if (firstLine.startsWith("#!/usr/bin/env pwsh") || firstLine.startsWith("#!/usr/bin/pwsh")) return "powershell";
 
-  // PowerShell-specific patterns (check before other languages)
-  if (
-    /\$(host|psversiontable|error|null|true|false|profile)/i.test(code) ||
-    /\b(Get-|Set-|New-|Remove-|Test-|Write-|Read-|Start-|Stop-|Invoke-)\w+/i.test(
-      code
-    ) ||
-    /\[cmdletbinding\(\)\]/i.test(code) ||
-    (/\bparam\s*\(/i.test(code) && code.includes("$")) ||
-    (/@{.*}/i.test(code) && code.includes("$"))
-  )
-    return "powershell";
+  // TypeScript - check before Haskell (both use ::)
+  if (/:\s*(string|number|boolean|any|void|never|unknown)/.test(code) || /interface\s+\w+/.test(code) || (/type\s+\w+\s*=/.test(code) && !code.includes("data"))) return "typescript";
 
-  // Specific language patterns
-  if (code.includes("<?php")) return "php";
-  if (code.includes("<!DOCTYPE") || code.includes("<html")) return "html";
-  if (/\bSELECT\b.*\bFROM\b/i.test(code) || /\bCREATE\s+TABLE\b/i.test(code))
-    return "sql";
-  if (code.includes("package main") && code.includes("func ")) return "go";
-  if (code.includes("fn main()") || code.includes("impl ")) return "rust";
-  if (code.includes("public class") && code.includes("public static void main"))
-    return "java";
-  if (
-    code.includes("def ") &&
-    (code.includes("import ") || code.includes("from "))
-  )
-    return "python";
-  if (
-    /^\s*function\s+\w+\s*\(/m.test(code) ||
-    /^\s*const\s+\w+\s*=/m.test(code)
-  )
-    return "javascript";
-  if (
-    code.includes("interface ") ||
-    (code.includes(": ") && code.includes("=>"))
-  )
-    return "typescript";
-  if (code.includes("@media") || /^[.#]\w+\s*{/m.test(code)) return "css";
+  // Haskell - check after TypeScript
+  if (/\b(module|where|data|instance|deriving)\b/.test(code) && /::\s*/.test(code) || /<-/.test(code) && /\b(do|let|in)\b/.test(code)) return "haskell";
 
-  // Default
+  // Elixir
+  if (/\bdefmodule\b/.test(code) || /\bdef\s+\w+\s+do\b/.test(code) || code.includes("|>")) return "elixir";
+
+  // Erlang
+  if (/^-module\(/.test(code) || /->/.test(code) && code.includes(".") && /\b(fun|receive|case)\b/.test(code)) return "erlang";
+
+  // Julia
+  if (/\b(function|end|using|import)\b/.test(code) && /\b(println|push!)\b/.test(code)) return "julia";
+
+  // Nim
+  if (/\b(proc|var|let|const|import)\b/.test(code) && code.includes(":")) return "nim";
+
+  // Zig
+  if (/\b(pub fn|const|var|comptime)\b/.test(code) || code.includes("@import")) return "zig";
+
+  // Groovy
+  if (/\b(def|class)\b/.test(code) && (code.includes("println") || code.includes("@"))) return "groovy";
+
+  // Elm
+  if (/\b(module|import|type alias|exposing)\b/.test(code) && code.includes("=")) return "elm";
+
+  // Fortran
+  if (/\b(PROGRAM|SUBROUTINE|FUNCTION|END)\b/i.test(code) || /^\s*\d+\s+/.test(code)) return "fortran";
+
+  // Assembly
+  if (/\b(mov|push|pop|jmp|call|ret)\b/i.test(code) || /^\s*\w+:/.test(code)) return "assembly";
+
+  // LaTeX
+  if (code.includes("\\documentclass") || code.includes("\\begin{") || code.includes("\\usepackage")) return "latex";
+
+  // Markdown
+  if (/^#{1,6}\s/.test(code) || /^\*\s/.test(code) || /^-\s/.test(code) || /\[.*\]\(.*\)/.test(code)) return "markdown";
+
+  // Kotlin - distinctive syntax
+  if (/\b(fun|val|var)\s+\w+/.test(code) || /:\s*(String|Int|Boolean|Double|Float|Long)/.test(code) || code.includes("companion object")) return "kotlin";
+
+  // Dart - Flutter/Dart specific
+  if (/\b(void|Future|async|await)\s+\w+\s*\(/.test(code) && code.includes(";") || code.includes("import 'package:") || code.includes("@override")) return "dart";
+
+  // PowerShell - enhanced detection
+  if (/\$(\w+|\{[^}]+\})/.test(code) || /\b(Get-|Set-|New-|Remove-|Test-|Write-|Read-|Start-|Stop-|Invoke-)\w+/i.test(code) || /\[cmdletbinding\(\)\]/i.test(code) || (/\bparam\s*\(/i.test(code) && code.includes("$"))) return "powershell";
+
+  // Bash/Shell - enhanced detection
+  if (/\b(echo|grep|awk|sed|cat|ls|cd|mkdir|rm|chmod|chown)\b/.test(code) || /\$\{?\w+\}?/.test(code) || /\|\|/.test(code) || code.includes("[[")||code.includes("$((")) return "bash";
+
+  // Swift
+  if (/\b(func|var|let|import UIKit|import Foundation)\b/.test(code) || code.includes("@objc") || /:\s*(String|Int|Bool|Double|Float)/.test(code)) return "swift";
+
+  // Scala
+  if (/\b(def|val|var|object|trait|case class)\b/.test(code) || code.includes("=>") && code.includes(":")) return "scala";
+
+  // Rust
+  if (/\b(fn|let|mut|impl|trait|struct|enum|pub)\b/.test(code) || code.includes("fn main()") || /->/.test(code)) return "rust";
+
+  // Go
+  if (/\b(func|package|import|type|struct|interface|go|defer|chan)\b/.test(code) || code.includes("package main")) return "go";
+
+  // PHP
+  if (code.includes("<?php") || /\$\w+\s*=/.test(code) && code.includes(";")) return "php";
+
+  // Python
+  if (/\b(def|class|import|from|print|if __name__)\b/.test(code) || /:$/.test(firstLine)) return "python";
+
+  // Java
+  if (/\b(public|private|protected)\s+(class|interface|enum)\b/.test(code) || code.includes("public static void main")) return "java";
+
+  // C/C++
+  if (/#include\s*[<"]/.test(code) || /\b(int|void|char|float|double)\s+\w+\s*\(/.test(code)) return code.includes("iostream") || code.includes("std::") ? "cpp" : "c";
+
+  // C#
+  if (/\b(using|namespace|class|public|private)\b/.test(code) && code.includes(";") || code.includes("Console.")) return "csharp";
+
+
+
+  // JavaScript/JSX
+  if (/\b(function|const|let|var|=>|async|await)\b/.test(code) || code.includes("require(") || code.includes("import ")) return code.includes("<") && code.includes("/>") ? "jsx" : "javascript";
+
+  // Ruby
+  if (/\b(def|end|class|module|require|puts)\b/.test(code) || code.includes("do |")) return "ruby";
+
+  // SQL
+  if (/\b(SELECT|INSERT|UPDATE|DELETE|CREATE|DROP|ALTER|FROM|WHERE|JOIN)\b/i.test(code)) return "sql";
+
+  // HTML
+  if (code.includes("<!DOCTYPE") || code.includes("<html") || /<\w+[^>]*>/.test(code)) return "html";
+
+  // CSS
+  if (code.includes("@media") || /^[.#]\w+\s*{/m.test(code) || /\w+\s*:\s*[^;]+;/.test(code)) return "css";
+
+  // YAML
+  if (/^\w+:\s/.test(firstLine) || /^\s*-\s+\w+:/.test(code)) return "yaml";
+
+  // TOML
+  if (/^\[\w+\]/.test(code) || /^\w+\s*=\s*["']/.test(code)) return "toml";
+
+  // JSON
+  if (/^\s*[{\[]/.test(code) && /[}\]]\s*$/.test(code.trim())) return "json";
+
   return "javascript";
 };
 
@@ -274,18 +382,18 @@ function HistoryControlBar() {
   };
 
   return (
-    <div className="bg-primary border-t border-primary/20 backdrop-blur-md shadow-lg flex items-center justify-between px-3 py-0.5">
-      <div className="flex items-center gap-2">
-        <div className="flex items-center gap-1.5">
+    <div className="bg-gradient-to-r from-primary/90 via-primary/80 to-primary/90 border-t border-white/10 backdrop-blur-xl shadow-lg flex items-center justify-between px-2 md:px-3 py-0.5">
+      <div className="flex items-center gap-1.5 md:gap-2">
+        <div className="flex items-center gap-1 md:gap-1.5">
           <div
-            className={`w-1.5 h-1.5 rounded-full ${getConnectionStatusColor()}`}
+            className={`w-1 md:w-1.5 h-1 md:h-1.5 rounded-full ${getConnectionStatusColor()}`}
           />
-          <span className="text-[10px] font-medium text-white">
+          <span className="text-[9px] md:text-[10px] font-medium text-white/90">
             {controls.itemsCount} {controls.itemsCount === 1 ? "item" : "items"}
           </span>
         </div>
       </div>
-      <div className="flex items-center gap-1">
+      <div className="flex items-center gap-0.5 md:gap-1">
         {/* Export Button */}
         {controls.exportEnabled && controls.canExport && controls.isHost && (
           <ExportHistoryButton
@@ -300,7 +408,7 @@ function HistoryControlBar() {
           variant="ghost"
           size="sm"
           onClick={controls.toggleAutoRefresh}
-          className="h-5 w-5 p-0 text-white hover:bg-white/20 rounded"
+          className="h-4 md:h-5 w-4 md:w-5 p-0 text-white/90 hover:bg-white/20 rounded-md transition-all"
           title={
             controls.autoRefreshEnabled
               ? "Pause auto-refresh"
@@ -308,9 +416,9 @@ function HistoryControlBar() {
           }
         >
           {controls.autoRefreshEnabled ? (
-            <Pause className="h-2.5 w-2.5" />
+            <Pause className="h-2 md:h-2.5 w-2 md:w-2.5" />
           ) : (
-            <Play className="h-2.5 w-2.5" />
+            <Play className="h-2 md:h-2.5 w-2 md:w-2.5" />
           )}
         </Button>
 
@@ -320,14 +428,14 @@ function HistoryControlBar() {
           size="sm"
           onClick={controls.handleManualRefresh}
           disabled={controls.isRefreshing}
-          className={`h-5 w-5 p-0 rounded ${
+          className={`h-4 md:h-5 w-4 md:w-5 p-0 rounded-md transition-all ${
             controls.isRefreshing
               ? "text-blue-300 animate-spin"
-              : "text-white hover:bg-white/20"
+              : "text-white/90 hover:bg-white/20"
           }`}
           title="Manual refresh"
         >
-          <RefreshCw className="h-2.5 w-2.5" />
+          <RefreshCw className="h-2 md:h-2.5 w-2 md:w-2.5" />
         </Button>
 
         {/* Timer Interval Button */}
@@ -335,11 +443,11 @@ function HistoryControlBar() {
           variant="ghost"
           size="sm"
           onClick={controls.cycleTimeInterval}
-          className="h-5 px-1.5 gap-1 text-white hover:bg-white/20 rounded"
+          className="h-4 md:h-5 px-1 md:px-1.5 gap-0.5 md:gap-1 text-white/90 hover:bg-white/20 rounded-md transition-all"
           title="Change refresh interval"
         >
-          <Timer className="h-2.5 w-2.5" />
-          <span className="text-[10px] font-medium">
+          <Timer className="h-2 md:h-2.5 w-2 md:w-2.5" />
+          <span className="text-[9px] md:text-[10px] font-medium">
             {formatTimeInterval(controls.autoRefreshInterval)}
           </span>
         </Button>
@@ -366,9 +474,18 @@ export default function ClipboardInput({ code }: { code: string }) {
   const [detectedLang, setDetectedLang] = useState<string>("javascript");
   const [activityLog, setActivityLog] = useState<string[]>([]);
   const [showActivityLog, setShowActivityLog] = useState(false);
+  // Live preview of converted content (only converted output, not original raw)
+  const [previewHtml, setPreviewHtml] = useState<string>("");
+  const [previewText, setPreviewText] = useState<string>("");
   const [isExpanded, setIsExpanded] = useState(false);
   const [showToolbar, setShowToolbar] = useState(false);
   const [isFocused, setIsFocused] = useState(false);
+  const [showPreview, setShowPreview] = useState(false);
+  const [braceCheckResult, setBraceCheckResult] = useState<{
+    open: boolean;
+    success: boolean;
+    errors: Array<{ line: number; char: string; type: string; lineContent: string }>;
+  }>({ open: false, success: false, errors: [] });
   const containerRef = useRef<HTMLDivElement>(null);
   const [errorDialog, setErrorDialog] = useState<{
     open: boolean;
@@ -391,7 +508,7 @@ export default function ClipboardInput({ code }: { code: string }) {
   const text = type === "code" ? codeContent : textContent;
   const setText = type === "code" ? setCodeContent : setTextContent;
 
-  // Simple markdown renderer for real-time preview
+  // Enhanced markdown renderer for real-time preview
   const renderMarkdown = (text: string) => {
     if (!text) return "";
 
@@ -400,34 +517,58 @@ export default function ClipboardInput({ code }: { code: string }) {
     // Headers (must be at start of line)
     html = html.replace(
       /^### (.+)$/gm,
-      '<h3 class="text-lg font-bold">$1</h3>'
+      '<h3 style="font-size: 1.125rem; font-weight: bold; margin: 0.5rem 0;">$1</h3>'
     );
-    html = html.replace(/^## (.+)$/gm, '<h2 class="text-xl font-bold">$1</h2>');
-    html = html.replace(/^# (.+)$/gm, '<h1 class="text-2xl font-bold">$1</h1>');
+    html = html.replace(
+      /^## (.+)$/gm,
+      '<h2 style="font-size: 1.25rem; font-weight: bold; margin: 0.5rem 0;">$1</h2>'
+    );
+    html = html.replace(
+      /^# (.+)$/gm,
+      '<h1 style="font-size: 1.5rem; font-weight: bold; margin: 0.5rem 0;">$1</h1>'
+    );
 
     // Bold
-    html = html.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
+    html = html.replace(
+      /\*\*(.+?)\*\*/g,
+      '<strong style="font-weight: bold;">$1</strong>'
+    );
 
     // Italic
-    html = html.replace(/\*(.+?)\*/g, "<em>$1</em>");
+    html = html.replace(
+      /(?<!\*)\*([^*]+?)\*(?!\*)/g,
+      '<em style="font-style: italic;">$1</em>'
+    );
 
     // Strikethrough
-    html = html.replace(/~~(.+?)~~/g, "<del>$1</del>");
+    html = html.replace(
+      /~~(.+?)~~/g,
+      '<del style="text-decoration: line-through;">$1</del>'
+    );
 
     // Underline
-    html = html.replace(/<u>(.+?)<\/u>/g, "<u>$1</u>");
+    html = html.replace(
+      /<u>(.+?)<\/u>/g,
+      '<u style="text-decoration: underline;">$1</u>'
+    );
 
     // Inline code/monospace
     html = html.replace(
       /`(.+?)`/g,
-      '<code class="bg-muted px-1 rounded text-sm font-mono">$1</code>'
+      '<code style="font-family: monospace; background-color: rgba(255,255,255,0.1); padding: 0.125rem 0.25rem; border-radius: 0.25rem; font-size: 0.875rem;">$1</code>'
     );
 
     // Superscript
-    html = html.replace(/\^(.+?)\^/g, "<sup>$1</sup>");
+    html = html.replace(
+      /\^(.+?)\^/g,
+      '<sup style="vertical-align: super; font-size: 0.75em;">$1</sup>'
+    );
 
     // Subscript
-    html = html.replace(/~(.+?)~/g, "<sub>$1</sub>");
+    html = html.replace(
+      /~(.+?)~/g,
+      '<sub style="vertical-align: sub; font-size: 0.75em;">$1</sub>'
+    );
 
     // Convert newlines to <br>
     html = html.replace(/\n/g, "<br>");
@@ -440,8 +581,74 @@ export default function ClipboardInput({ code }: { code: string }) {
     if (type === "code" && codeContent.trim()) {
       const lang = detectLanguage(codeContent);
       setDetectedLang(lang);
+    } else if (type === "code") {
+      setDetectedLang("javascript");
     }
   }, [codeContent, type]);
+
+  // Update live preview (converted output only)
+  useEffect(() => {
+    const updatePreview = async () => {
+      try {
+        if (type === "text") {
+          // Convert markdown-ish to HTML preview (only converted output)
+          setPreviewHtml(renderMarkdown(text));
+          setPreviewText("");
+        } else if (type === "code") {
+          // Try to prettify code for preview. Use Prettier where available.
+          const source = codeContent || "";
+          if (!source.trim()) {
+            setPreviewHtml("");
+            setPreviewText("");
+            return;
+          }
+
+          const mapLangToParser: Record<string, string> = {
+            javascript: "babel",
+            typescript: "typescript",
+            jsx: "babel",
+            tsx: "typescript",
+            html: "html",
+            css: "css",
+            json: "json",
+            // fallback
+          };
+
+          const parser =
+            mapLangToParser[detectedLang] ||
+            (detectedLang === "python" ? "babel" : "babel");
+
+          try {
+            const formatted = await (prettier.format as any)(source, {
+              parser: parser as any,
+              plugins: [
+                prettierBabel as any,
+                prettierTypescript as any,
+                prettierHtml as any,
+                prettierCss as any,
+                prettierEstree as any,
+              ],
+            });
+            // render as escaped code block
+            setPreviewHtml("");
+            setPreviewText(formatted as string);
+          } catch (e) {
+            // Fallback: show raw code escaped
+            setPreviewHtml("");
+            setPreviewText(source);
+          }
+        } else {
+          setPreviewHtml("");
+          setPreviewText("");
+        }
+      } catch (err) {
+        setPreviewHtml("");
+        setPreviewText("");
+      }
+    };
+
+    updatePreview();
+  }, [textContent, codeContent, type, detectedLang]);
 
   // Initialize device ID on client side
   useEffect(() => {
@@ -486,7 +693,7 @@ export default function ClipboardInput({ code }: { code: string }) {
         },
         (payload) => {
           if (payload.new) {
-            setIsFrozen(payload.new.is_frozen || false);
+            setIsFrozen(payload.new.is_frozen === true);
             setCanView(payload.new.can_view !== false);
           }
         }
@@ -494,7 +701,7 @@ export default function ClipboardInput({ code }: { code: string }) {
       // Listen for realtime broadcast events for instant permission changes
       .on("broadcast", { event: "permission_changed" }, (payload) => {
         if (payload.payload.device_id === deviceId) {
-          setIsFrozen(payload.payload.is_frozen || false);
+          setIsFrozen(payload.payload.is_frozen === true);
           setCanView(payload.payload.can_view !== false);
         }
       })
@@ -634,6 +841,30 @@ export default function ClipboardInput({ code }: { code: string }) {
       const cleanedText = selectedText.replace(/^#+\s*/, "");
       newText = text.substring(0, start) + cleanedText + text.substring(end);
       newCursorPos = start + cleanedText.length;
+    } else if (format === "uppercase") {
+      // Convert selected text or all to uppercase
+      if (selectedText) {
+        newText =
+          text.substring(0, start) +
+          selectedText.toUpperCase() +
+          text.substring(end);
+        newCursorPos = start + selectedText.toUpperCase().length;
+      } else {
+        newText = text.toUpperCase();
+        newCursorPos = 0;
+      }
+    } else if (format === "lowercase") {
+      // Convert selected text or all to lowercase
+      if (selectedText) {
+        newText =
+          text.substring(0, start) +
+          selectedText.toLowerCase() +
+          text.substring(end);
+        newCursorPos = start + selectedText.toLowerCase().length;
+      } else {
+        newText = text.toLowerCase();
+        newCursorPos = 0;
+      }
     }
 
     setText(newText);
@@ -685,6 +916,7 @@ export default function ClipboardInput({ code }: { code: string }) {
           semi: true,
           singleQuote: false,
           tabWidth: 2,
+          useTabs: false,
           trailingComma: "es5",
         });
         newCursorPos = 0;
@@ -699,32 +931,50 @@ export default function ClipboardInput({ code }: { code: string }) {
       }
     } else if (format === "comment") {
       // Toggle line comments with language-specific syntax
-      const lines = selectedText
-        ? selectedText.split("\n")
-        : [text.substring(0, start).split("\n").pop() || ""];
-      const commentSyntax = langComments.line;
-      const commentEscaped = commentSyntax.replace(
-        /[.*+?^${}()|[\]\\]/g,
-        "\\$&"
-      );
-      const commentPattern = new RegExp(`^(\\s*)${commentEscaped}\\s?`);
+      if (!selectedText) {
+        // If no selection, comment current line
+        const lines = text.split("\n");
+        const currentLineIndex = text.substring(0, start).split("\n").length - 1;
+        const currentLine = lines[currentLineIndex];
+        
+        const commentSyntax = langComments.line;
+        const commentEscaped = commentSyntax.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        const commentPattern = new RegExp(`^(\\s*)${commentEscaped}\\s?`);
+        
+        if (commentPattern.test(currentLine)) {
+          lines[currentLineIndex] = currentLine.replace(commentPattern, "$1");
+        } else {
+          const leadingSpace = currentLine.match(/^\s*/)?.[0] || "";
+          const content = currentLine.substring(leadingSpace.length);
+          lines[currentLineIndex] = leadingSpace + commentSyntax + " " + content;
+        }
+        
+        newText = lines.join("\n");
+        newCursorPos = start;
+      } else {
+        // Comment selected lines
+        const lines = selectedText.split("\n");
+        const commentSyntax = langComments.line;
+        const commentEscaped = commentSyntax.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        const commentPattern = new RegExp(`^(\\s*)${commentEscaped}\\s?`);
 
-      const allCommented = lines.every(
-        (line) => !line.trim() || commentPattern.test(line)
-      );
+        const allCommented = lines.every(
+          (line) => !line.trim() || commentPattern.test(line)
+        );
 
-      const newLines = allCommented
-        ? lines.map((line) => line.replace(commentPattern, "$1"))
-        : lines.map((line) => {
-            if (!line.trim()) return line;
-            const leadingSpace = line.match(/^\s*/)?.[0] || "";
-            const content = line.substring(leadingSpace.length);
-            return leadingSpace + commentSyntax + " " + content;
-          });
+        const newLines = allCommented
+          ? lines.map((line) => line.replace(commentPattern, "$1"))
+          : lines.map((line) => {
+              if (!line.trim()) return line;
+              const leadingSpace = line.match(/^\s*/)?.[0] || "";
+              const content = line.substring(leadingSpace.length);
+              return leadingSpace + commentSyntax + " " + content;
+            });
 
-      newText =
-        text.substring(0, start) + newLines.join("\n") + text.substring(end);
-      newCursorPos = start + newLines.join("\n").length;
+        newText =
+          text.substring(0, start) + newLines.join("\n") + text.substring(end);
+        newCursorPos = start + newLines.join("\n").length;
+      }
     } else if (format === "indent") {
       // Indent selected lines
       const lines = selectedText.split("\n");
@@ -774,35 +1024,80 @@ export default function ClipboardInput({ code }: { code: string }) {
         newCursorPos = 0;
       }
     } else if (format === "braces") {
-      // Brace checker: find unclosed braces, brackets, parentheses
+      // Advanced brace checker: handles strings, comments, and all bracket types
       const codeToCheck = text;
+      const lines = text.split("\n");
       const stack: Array<{ char: string; pos: number; line: number }> = [];
-      const errors: Array<{ line: number; char: string; type: string }> = [];
+      const errors: Array<{ line: number; char: string; type: string; lineContent: string }> = [];
       const pairs: Record<string, string> = { "{": "}", "[": "]", "(": ")" };
-      const closePairs: Record<string, string> = {
-        "}": "{",
-        "]": "[",
-        ")": "(",
-      };
+      const closePairs: Record<string, string> = { "}": "{", "]": "[", ")": "(" };
 
       let line = 1;
+      let inString = false;
+      let stringChar = "";
+      let inLineComment = false;
+      let inBlockComment = false;
+
       for (let i = 0; i < codeToCheck.length; i++) {
         const char = codeToCheck[i];
+        const nextChar = codeToCheck[i + 1];
+        const prevChar = codeToCheck[i - 1];
 
+        // Handle newlines
         if (char === "\n") {
           line++;
+          inLineComment = false;
           continue;
         }
 
+        // Skip if in line comment
+        if (inLineComment) continue;
+
+        // Check for block comment start/end
+        if (!inString && char === "/" && nextChar === "*") {
+          inBlockComment = true;
+          i++;
+          continue;
+        }
+        if (inBlockComment && char === "*" && nextChar === "/") {
+          inBlockComment = false;
+          i++;
+          continue;
+        }
+        if (inBlockComment) continue;
+
+        // Check for line comment
+        if (!inString && char === "/" && nextChar === "/") {
+          inLineComment = true;
+          continue;
+        }
+
+        // Handle strings (ignore escaped quotes)
+        if ((char === '"' || char === "'" || char === "`") && prevChar !== "\\") {
+          if (!inString) {
+            inString = true;
+            stringChar = char;
+          } else if (char === stringChar) {
+            inString = false;
+            stringChar = "";
+          }
+          continue;
+        }
+
+        // Skip if in string
+        if (inString) continue;
+
+        // Check brackets
         if (pairs[char]) {
           stack.push({ char, pos: i, line });
         } else if (closePairs[char]) {
           if (stack.length === 0) {
-            errors.push({ line, char, type: "unexpected_close" });
+            errors.push({ line, char, type: "unexpected_close", lineContent: lines[line - 1] || "" });
           } else {
             const last = stack.pop()!;
             if (pairs[last.char] !== char) {
-              errors.push({ line, char, type: "mismatch" });
+              errors.push({ line, char, type: "mismatch", lineContent: lines[line - 1] || "" });
+              stack.push(last); // Put it back for better error reporting
             }
           }
         }
@@ -811,35 +1106,83 @@ export default function ClipboardInput({ code }: { code: string }) {
       // Unclosed braces
       while (stack.length > 0) {
         const unclosed = stack.pop()!;
-        errors.push({
-          line: unclosed.line,
-          char: unclosed.char,
-          type: "unclosed",
-        });
+        errors.push({ line: unclosed.line, char: unclosed.char, type: "unclosed", lineContent: lines[unclosed.line - 1] || "" });
       }
 
-      // Show errors as inline message (prepend to code)
-      if (errors.length > 0) {
-        const errorMsg =
-          langComments.line +
-          " ⚠️ BRACE ERRORS:\n" +
-          errors
-            .map((e) => {
-              if (e.type === "unclosed")
-                return `${langComments.line} Line ${e.line}: Unclosed '${e.char}'`;
-              if (e.type === "unexpected_close")
-                return `${langComments.line} Line ${e.line}: Unexpected '${e.char}'`;
-              return `${langComments.line} Line ${e.line}: Mismatched '${e.char}'`;
-            })
-            .join("\n") +
-          "\n${langComments.line}\n";
-        newText = errorMsg + text;
-        newCursorPos = 0;
+      // Show result in bottom sheet
+      setBraceCheckResult({
+        open: true,
+        success: errors.length === 0,
+        errors: errors,
+      });
+      
+      // Don't auto-fix, just report
+      return;
+    } else if (format === "duplicate") {
+      // Duplicate current line or selection
+      if (selectedText) {
+        newText = text.substring(0, end) + "\n" + selectedText + text.substring(end);
+        newCursorPos = end + selectedText.length + 1;
       } else {
-        const successMsg = `${langComments.line} ✓ All braces matched correctly!\n${langComments.line}\n`;
-        newText = successMsg + text;
-        newCursorPos = 0;
+        const lines = text.split("\n");
+        const currentLineIndex = text.substring(0, start).split("\n").length - 1;
+        const currentLine = lines[currentLineIndex];
+        lines.splice(currentLineIndex + 1, 0, currentLine);
+        newText = lines.join("\n");
+        newCursorPos = start + currentLine.length + 1;
       }
+    } else if (format === "removeComments") {
+      // Intelligent multi-language comment removal
+      const commentSyntax = langComments.line;
+      const blockComment = langComments.block;
+      let cleaned = text;
+      
+      // Remove block comments if language supports them
+      if (blockComment) {
+        const blockStart = blockComment.start.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        const blockEnd = blockComment.end.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        const blockPattern = new RegExp(`${blockStart}[\\s\\S]*?${blockEnd}`, "g");
+        cleaned = cleaned.replace(blockPattern, "");
+      }
+      
+      // Remove line comments
+      const lines = cleaned.split("\n");
+      const commentEscaped = commentSyntax.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      
+      const cleanedLines = lines.map(line => {
+        let inString = false;
+        let stringChar = "";
+        let result = "";
+        
+        for (let i = 0; i < line.length; i++) {
+          const char = line[i];
+          const remaining = line.substring(i);
+          
+          // Track string state
+          if ((char === '"' || char === "'" || char === "`") && line[i - 1] !== "\\") {
+            if (!inString) {
+              inString = true;
+              stringChar = char;
+            } else if (char === stringChar) {
+              inString = false;
+              stringChar = "";
+            }
+          }
+          
+          // Check for line comment outside strings
+          if (!inString && remaining.startsWith(commentSyntax)) {
+            break; // Rest of line is comment
+          }
+          
+          result += char;
+        }
+        
+        return result.trimEnd();
+      });
+      
+      // Remove empty lines that were only comments
+      newText = cleanedLines.filter(line => line.trim() !== "").join("\n");
+      newCursorPos = 0;
     } else if (format === "minify") {
       // MINIFY: Strip ALL whitespace, newlines, comments
       let minified = text;
@@ -1194,24 +1537,31 @@ export default function ClipboardInput({ code }: { code: string }) {
           ${isFocused ? "h-[70vh]" : "h-auto"}
         `}
       >
-        <form onSubmit={submit} className="h-full flex flex-col">
+        {/* Frozen Banner */}
+        {isFrozen && (
+          <div className="bg-orange-500/20 border-b border-orange-500/30 px-4 py-2 flex items-center gap-2">
+            <div className="w-2 h-2 rounded-full bg-orange-500 animate-pulse" />
+            <span className="text-xs font-medium text-orange-300">🔒 Input Frozen - You can view but cannot write</span>
+          </div>
+        )}
+        <form onSubmit={submit} className="h-full flex flex-col relative">
           {/* Single Row: Fixed Tabs (Left) + Scrollable Formatting (Right) */}
-          <div className="shrink-0 px-3 py-2 border-b border-slate-700/50 bg-slate-800/50 flex items-center gap-3">
+          <div className="shrink-0 px-2 py-0.5 md:px-3 md:py-1 border-b border-white/5 bg-gradient-to-r from-slate-900/80 via-slate-900/60 to-slate-900/80 backdrop-blur-xl flex items-center gap-1.5 md:gap-2">
             {/* Left: Fixed Tab Buttons */}
-            <div className="flex items-center gap-2 shrink-0">
+            <div className="flex items-center gap-1 md:gap-1.5 shrink-0">
               <Button
                 type="button"
                 variant="ghost"
                 disabled={!canView}
                 onClick={() => setType("text")}
                 size="sm"
-                className={`h-8 px-3 text-xs font-semibold rounded transition-all duration-200 ${
+                className={`h-6 md:h-6 px-2.5 md:px-3 text-[10px] md:text-[11px] font-medium rounded-none border-b-2 transition-all ${
                   type === "text"
-                    ? "bg-primary text-primary-foreground shadow-lg shadow-primary/25 scale-105"
-                    : "hover:bg-primary/10 hover:scale-105"
+                    ? "border-primary text-foreground"
+                    : "border-transparent hover:border-white/20 text-muted-foreground hover:text-foreground"
                 }`}
               >
-                <Type className="h-3.5 w-3.5 mr-1.5" />
+                <Type className="h-2.5 md:h-3 w-2.5 md:w-3 mr-1 md:mr-1.5" />
                 Text
               </Button>
               <Button
@@ -1220,13 +1570,13 @@ export default function ClipboardInput({ code }: { code: string }) {
                 disabled={!canView}
                 onClick={() => setType("code")}
                 size="sm"
-                className={`h-8 px-3 text-xs font-semibold rounded transition-all duration-200 ${
+                className={`h-6 md:h-6 px-2.5 md:px-3 text-[10px] md:text-[11px] font-medium rounded-none border-b-2 transition-all ${
                   type === "code"
-                    ? "bg-primary text-primary-foreground shadow-lg shadow-primary/25 scale-105"
-                    : "hover:bg-primary/10 hover:scale-105"
+                    ? "border-primary text-foreground"
+                    : "border-transparent hover:border-white/20 text-muted-foreground hover:text-foreground"
                 }`}
               >
-                <Code className="h-3.5 w-3.5 mr-1.5" />
+                <Code className="h-2.5 md:h-3 w-2.5 md:w-3 mr-1 md:mr-1.5" />
                 Code
               </Button>
               <Button
@@ -1235,26 +1585,46 @@ export default function ClipboardInput({ code }: { code: string }) {
                 disabled={!canView}
                 onClick={() => setType("file")}
                 size="sm"
-                className={`h-8 px-3 text-xs font-semibold rounded transition-all duration-200 ${
+                className={`h-6 md:h-6 px-2.5 md:px-3 text-[10px] md:text-[11px] font-medium rounded-none border-b-2 transition-all ${
                   type === "file"
-                    ? "bg-primary text-primary-foreground shadow-lg shadow-primary/25 scale-105"
-                    : "hover:bg-primary/10 hover:scale-105"
+                    ? "border-primary text-foreground"
+                    : "border-transparent hover:border-white/20 text-muted-foreground hover:text-foreground"
                 }`}
               >
-                <Upload className="h-3.5 w-3.5 mr-1.5" />
+                <Upload className="h-2.5 md:h-3 w-2.5 md:w-3 mr-1 md:mr-1.5" />
                 File
               </Button>
             </div>
 
             {/* Separator */}
             {type !== "file" && isFocused && (
-              <div className="w-px h-6 bg-gradient-to-b from-transparent via-primary/20 to-transparent shrink-0" />
+              <div className="w-px h-3 md:h-4 bg-gradient-to-b from-transparent via-white/10 to-transparent shrink-0" />
             )}
 
             {/* Right: Scrollable Formatting Toolbar */}
             {type !== "file" && isFocused && (
               <div className="flex-1 overflow-x-auto scrollbar-none">
-                <div className="flex items-center gap-1.5 min-w-max">
+                <div className="flex items-center gap-1 md:gap-1.5 min-w-max">
+                  {/* Preview Toggle Button - Only show when there's content */}
+                  {text.trim() && (
+                    <>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setShowPreview(!showPreview)}
+                        className={`h-6 md:h-6 w-6 md:w-6 p-0 rounded-md shrink-0 transition-all ${
+                          showPreview
+                            ? "bg-primary/20 text-primary"
+                            : "hover:bg-white/5 text-muted-foreground"
+                        }`}
+                        title="Toggle Preview"
+                      >
+                        <Eye className="h-2.5 md:h-3 w-2.5 md:w-3" />
+                      </Button>
+                      <div className="w-px h-3 md:h-4 bg-gradient-to-b from-transparent via-white/10 to-transparent mx-1 shrink-0" />
+                    </>
+                  )}
                   {type === "text" ? (
                     <>
                       <Button
@@ -1263,10 +1633,10 @@ export default function ClipboardInput({ code }: { code: string }) {
                         size="sm"
                         disabled={!canView}
                         onClick={() => handleTextFormat("bold")}
-                        className="h-7 w-7 p-0 rounded shrink-0 hover:bg-primary/15 hover:scale-110 transition-all"
+                        className="h-5 md:h-6 w-5 md:w-6 p-0 rounded-md shrink-0 hover:bg-white/5 transition-all text-muted-foreground hover:text-foreground"
                         title="Bold (Ctrl+B)"
                       >
-                        <Bold className="h-3.5 w-3.5" />
+                        <Bold className="h-2.5 md:h-3 w-2.5 md:w-3" />
                       </Button>
                       <Button
                         type="button"
@@ -1274,10 +1644,10 @@ export default function ClipboardInput({ code }: { code: string }) {
                         size="sm"
                         disabled={!canView}
                         onClick={() => handleTextFormat("italic")}
-                        className="h-7 w-7 p-0 rounded shrink-0 hover:bg-primary/15 hover:scale-110 transition-all"
+                        className="h-5 md:h-6 w-5 md:w-6 p-0 rounded-md shrink-0 hover:bg-white/5 transition-all text-muted-foreground hover:text-foreground"
                         title="Italic (Ctrl+I)"
                       >
-                        <Italic className="h-3.5 w-3.5" />
+                        <Italic className="h-2.5 md:h-3 w-2.5 md:w-3" />
                       </Button>
                       <Button
                         type="button"
@@ -1285,10 +1655,10 @@ export default function ClipboardInput({ code }: { code: string }) {
                         size="sm"
                         disabled={!canView}
                         onClick={() => handleTextFormat("underline")}
-                        className="h-7 w-7 p-0 rounded shrink-0 hover:bg-primary/15 hover:scale-110 transition-all"
+                        className="h-5 md:h-6 w-5 md:w-6 p-0 rounded-md shrink-0 hover:bg-white/5 transition-all text-muted-foreground hover:text-foreground"
                         title="Underline"
                       >
-                        <Underline className="h-3.5 w-3.5" />
+                        <Underline className="h-2.5 md:h-3 w-2.5 md:w-3" />
                       </Button>
                       <Button
                         type="button"
@@ -1296,10 +1666,10 @@ export default function ClipboardInput({ code }: { code: string }) {
                         size="sm"
                         disabled={!canView}
                         onClick={() => handleTextFormat("strikethrough")}
-                        className="h-7 w-7 p-0 rounded shrink-0 hover:bg-primary/15 hover:scale-110 transition-all"
+                        className="h-5 md:h-6 w-5 md:w-6 p-0 rounded-md shrink-0 hover:bg-white/5 transition-all text-muted-foreground hover:text-foreground"
                         title="Strikethrough"
                       >
-                        <Strikethrough className="h-3.5 w-3.5" />
+                        <Strikethrough className="h-2.5 md:h-3 w-2.5 md:w-3" />
                       </Button>
                       <Button
                         type="button"
@@ -1307,22 +1677,22 @@ export default function ClipboardInput({ code }: { code: string }) {
                         size="sm"
                         disabled={!canView}
                         onClick={() => handleTextFormat("monospace")}
-                        className="h-7 w-7 p-0 rounded shrink-0 hover:bg-primary/15 hover:scale-110 transition-all"
+                        className="h-5 md:h-6 w-5 md:w-6 p-0 rounded-md shrink-0 hover:bg-white/5 transition-all text-muted-foreground hover:text-foreground"
                         title="Monospace"
                       >
-                        <MonitorDot className="h-3.5 w-3.5" />
+                        <MonitorDot className="h-2.5 md:h-3 w-2.5 md:w-3" />
                       </Button>
-                      <div className="w-px h-5 bg-linear-to-b from-transparent via-primary/20 to-transparent mx-1 shrink-0" />
+                      <div className="w-px h-3 md:h-4 bg-gradient-to-b from-transparent via-white/10 to-transparent mx-0.5 shrink-0" />
                       <Button
                         type="button"
                         variant="ghost"
                         size="sm"
                         disabled={!canView}
                         onClick={() => handleTextFormat("h1")}
-                        className="h-7 w-7 p-0 rounded shrink-0 hover:bg-primary/15 hover:scale-110 transition-all"
+                        className="h-5 md:h-6 w-5 md:w-6 p-0 rounded-md shrink-0 hover:bg-white/5 transition-all text-muted-foreground hover:text-foreground"
                         title="Heading 1"
                       >
-                        <Heading1 className="h-3.5 w-3.5" />
+                        <Heading1 className="h-2.5 md:h-3 w-2.5 md:w-3" />
                       </Button>
                       <Button
                         type="button"
@@ -1330,10 +1700,10 @@ export default function ClipboardInput({ code }: { code: string }) {
                         size="sm"
                         disabled={!canView}
                         onClick={() => handleTextFormat("h2")}
-                        className="h-7 w-7 p-0 rounded shrink-0 hover:bg-primary/15 hover:scale-110 transition-all"
+                        className="h-5 md:h-6 w-5 md:w-6 p-0 rounded-md shrink-0 hover:bg-white/5 transition-all text-muted-foreground hover:text-foreground"
                         title="Heading 2"
                       >
-                        <Heading2 className="h-3.5 w-3.5" />
+                        <Heading2 className="h-2.5 md:h-3 w-2.5 md:w-3" />
                       </Button>
                       <Button
                         type="button"
@@ -1341,10 +1711,33 @@ export default function ClipboardInput({ code }: { code: string }) {
                         size="sm"
                         disabled={!canView}
                         onClick={() => handleTextFormat("h3")}
-                        className="h-7 w-7 p-0 rounded shrink-0 hover:bg-primary/15 hover:scale-110 transition-all"
+                        className="h-5 md:h-6 w-5 md:w-6 p-0 rounded-md shrink-0 hover:bg-white/5 transition-all text-muted-foreground hover:text-foreground"
                         title="Heading 3"
                       >
-                        <Heading3 className="h-3.5 w-3.5" />
+                        <Heading3 className="h-2.5 md:h-3 w-2.5 md:w-3" />
+                      </Button>
+                      <div className="w-px h-3 md:h-4 bg-gradient-to-b from-transparent via-white/10 to-transparent mx-0.5 shrink-0" />
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        disabled={!canView}
+                        onClick={() => handleTextFormat("uppercase")}
+                        className="h-5 md:h-6 w-5 md:w-6 p-0 rounded-md shrink-0 hover:bg-white/5 transition-all text-muted-foreground hover:text-foreground"
+                        title="UPPERCASE"
+                      >
+                        <span className="text-[8px] md:text-[9px] font-bold">AA</span>
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        disabled={!canView}
+                        onClick={() => handleTextFormat("lowercase")}
+                        className="h-5 md:h-6 w-5 md:w-6 p-0 rounded-md shrink-0 hover:bg-white/5 transition-all text-muted-foreground hover:text-foreground"
+                        title="lowercase"
+                      >
+                        <span className="text-[8px] md:text-[9px] font-bold">aa</span>
                       </Button>
                     </>
                   ) : type === "code" ? (
@@ -1355,10 +1748,10 @@ export default function ClipboardInput({ code }: { code: string }) {
                         size="sm"
                         disabled={!canView}
                         onClick={() => handleCodeFormat("comment")}
-                        className="h-7 w-7 p-0 rounded shrink-0 hover:bg-primary/15 hover:scale-110 transition-all"
+                        className="h-5 md:h-6 w-5 md:w-6 p-0 rounded-md shrink-0 hover:bg-white/5 transition-all text-muted-foreground hover:text-foreground"
                         title="Comment (Ctrl+/)"
                       >
-                        <Hash className="h-3.5 w-3.5" />
+                        <Hash className="h-2.5 md:h-3 w-2.5 md:w-3" />
                       </Button>
                       <Button
                         type="button"
@@ -1366,10 +1759,10 @@ export default function ClipboardInput({ code }: { code: string }) {
                         size="sm"
                         disabled={!canView}
                         onClick={() => handleCodeFormat("indent")}
-                        className="h-7 w-7 p-0 rounded shrink-0 hover:bg-primary/15 hover:scale-110 transition-all"
+                        className="h-5 md:h-6 w-5 md:w-6 p-0 rounded-md shrink-0 hover:bg-white/5 transition-all text-muted-foreground hover:text-foreground"
                         title="Indent (Tab)"
                       >
-                        <Indent className="h-3.5 w-3.5" />
+                        <Indent className="h-2.5 md:h-3 w-2.5 md:w-3" />
                       </Button>
                       <Button
                         type="button"
@@ -1377,22 +1770,22 @@ export default function ClipboardInput({ code }: { code: string }) {
                         size="sm"
                         disabled={!canView}
                         onClick={() => handleCodeFormat("outdent")}
-                        className="h-7 w-7 p-0 rounded shrink-0 hover:bg-primary/15 hover:scale-110 transition-all"
+                        className="h-5 md:h-6 w-5 md:w-6 p-0 rounded-md shrink-0 hover:bg-white/5 transition-all text-muted-foreground hover:text-foreground"
                         title="Outdent (Shift+Tab)"
                       >
-                        <Outdent className="h-3.5 w-3.5" />
+                        <Outdent className="h-2.5 md:h-3 w-2.5 md:w-3" />
                       </Button>
-                      <div className="w-px h-5 bg-linear-to-b from-transparent via-primary/20 to-transparent mx-1 shrink-0" />
+                      <div className="w-px h-3 md:h-4 bg-gradient-to-b from-transparent via-white/10 to-transparent mx-0.5 shrink-0" />
                       <Button
                         type="button"
                         variant="ghost"
                         size="sm"
                         disabled={!canView}
                         onClick={() => handleCodeFormat("braces")}
-                        className="h-7 w-7 p-0 rounded shrink-0 hover:bg-primary/15 hover:scale-110 transition-all"
+                        className="h-5 md:h-6 w-5 md:w-6 p-0 rounded-md shrink-0 hover:bg-white/5 transition-all text-muted-foreground hover:text-foreground"
                         title="Check Braces"
                       >
-                        <Braces className="h-3.5 w-3.5" />
+                        <Braces className="h-2.5 md:h-3 w-2.5 md:w-3" />
                       </Button>
                       <Button
                         type="button"
@@ -1400,10 +1793,10 @@ export default function ClipboardInput({ code }: { code: string }) {
                         size="sm"
                         disabled={!canView}
                         onClick={() => handleCodeFormat("prettify")}
-                        className="h-7 w-7 p-0 rounded shrink-0 hover:bg-primary/15 hover:scale-110 transition-all"
+                        className="h-5 md:h-6 w-5 md:w-6 p-0 rounded-md shrink-0 hover:bg-white/5 transition-all text-muted-foreground hover:text-foreground"
                         title="Prettify (Format with Prettier)"
                       >
-                        <Sparkles className="h-3.5 w-3.5" />
+                        <Sparkles className="h-2.5 md:h-3 w-2.5 md:w-3" />
                       </Button>
                       <Button
                         type="button"
@@ -1411,10 +1804,10 @@ export default function ClipboardInput({ code }: { code: string }) {
                         size="sm"
                         disabled={!canView}
                         onClick={() => handleCodeFormat("minify")}
-                        className="h-7 w-7 p-0 rounded shrink-0 hover:bg-primary/15 hover:scale-110 transition-all"
+                        className="h-5 md:h-6 w-5 md:w-6 p-0 rounded-md shrink-0 hover:bg-white/5 transition-all text-muted-foreground hover:text-foreground"
                         title="Minify (Remove Whitespace)"
                       >
-                        <Minimize2 className="h-3.5 w-3.5" />
+                        <Minimize2 className="h-2.5 md:h-3 w-2.5 md:w-3" />
                       </Button>
                       <Button
                         type="button"
@@ -1422,10 +1815,10 @@ export default function ClipboardInput({ code }: { code: string }) {
                         size="sm"
                         disabled={!canView}
                         onClick={() => handleCodeFormat("wrap")}
-                        className="h-7 w-7 p-0 rounded shrink-0 hover:bg-primary/15 hover:scale-110 transition-all"
+                        className="h-5 md:h-6 w-5 md:w-6 p-0 rounded-md shrink-0 hover:bg-white/5 transition-all text-muted-foreground hover:text-foreground"
                         title="Wrap Long Lines"
                       >
-                        <WrapText className="h-3.5 w-3.5" />
+                        <WrapText className="h-2.5 md:h-3 w-2.5 md:w-3" />
                       </Button>
                       <Button
                         type="button"
@@ -1433,10 +1826,10 @@ export default function ClipboardInput({ code }: { code: string }) {
                         size="sm"
                         disabled={!canView}
                         onClick={() => handleCodeFormat("uppercase")}
-                        className="h-7 w-7 p-0 rounded shrink-0 hover:bg-primary/15 hover:scale-110 transition-all"
+                        className="h-5 md:h-6 w-5 md:w-6 p-0 rounded-md shrink-0 hover:bg-white/5 transition-all text-muted-foreground hover:text-foreground"
                         title="UPPERCASE"
                       >
-                        <span className="text-[10px] font-bold">AA</span>
+                        <span className="text-[8px] md:text-[9px] font-bold">AA</span>
                       </Button>
                       <Button
                         type="button"
@@ -1444,10 +1837,35 @@ export default function ClipboardInput({ code }: { code: string }) {
                         size="sm"
                         disabled={!canView}
                         onClick={() => handleCodeFormat("lowercase")}
-                        className="h-7 w-7 p-0 rounded shrink-0 hover:bg-primary/15 hover:scale-110 transition-all"
+                        className="h-5 md:h-6 w-5 md:w-6 p-0 rounded-md shrink-0 hover:bg-white/5 transition-all text-muted-foreground hover:text-foreground"
                         title="lowercase"
                       >
-                        <span className="text-[10px] font-bold">aa</span>
+                        <span className="text-[8px] md:text-[9px] font-bold">aa</span>
+                      </Button>
+                      <div className="w-px h-3 md:h-4 bg-gradient-to-b from-transparent via-white/10 to-transparent mx-0.5 shrink-0" />
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        disabled={!canView}
+                        onClick={() => handleCodeFormat("duplicate")}
+                        className="h-5 md:h-6 px-1.5 md:px-2 text-[10px] md:text-[11px] rounded-md shrink-0 hover:bg-white/5 transition-all text-muted-foreground hover:text-foreground"
+                        title="Duplicate Line"
+                      >
+                        <Copy className="h-2.5 md:h-3 w-2.5 md:w-3 mr-0.5 md:mr-1" />
+                        Dup
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        disabled={!canView}
+                        onClick={() => handleCodeFormat("removeComments")}
+                        className="h-5 md:h-6 px-1.5 md:px-2 text-[10px] md:text-[11px] rounded-md shrink-0 hover:bg-white/5 transition-all text-muted-foreground hover:text-foreground"
+                        title="Remove All Comments"
+                      >
+                        <Eraser className="h-2.5 md:h-3 w-2.5 md:w-3 mr-0.5 md:mr-1" />
+                        Clean
                       </Button>
                     </>
                   ) : null}
@@ -1462,9 +1880,9 @@ export default function ClipboardInput({ code }: { code: string }) {
             {type === "code" && codeContent.trim() && !isFocused && (
               <Badge
                 variant="outline"
-                className="h-6 px-3 text-[10px] font-mono shrink-0 bg-primary/5 border-primary/20 backdrop-blur-sm rounded"
+                className="h-4 md:h-5 px-2 md:px-2.5 text-[9px] md:text-[10px] font-mono shrink-0 bg-white/5 border-white/10 backdrop-blur-sm rounded-md"
               >
-                <Languages className="h-3 w-3 mr-1.5" />
+                <Languages className="h-2 md:h-2.5 w-2 md:w-2.5 mr-1 md:mr-1.5" />
                 {detectedLang}
               </Badge>
             )}
@@ -1546,74 +1964,90 @@ export default function ClipboardInput({ code }: { code: string }) {
               </div>
             ) : (
               <div className="flex-1 relative flex flex-col">
-                <Textarea
-                  placeholder={
-                    type === "code"
-                      ? "Paste or type your code here..."
-                      : "Type your message..."
-                  }
-                  ref={textareaRef}
-                  value={text}
-                  onFocus={() => setIsFocused(true)}
-                  onChange={(e) => {
-                    const newValue = e.target.value;
-                    // Mutual exclusivity: Clear the other type's content
-                    if (type === "text" && codeContent) {
-                      setCodeContent("");
-                    } else if (type === "code" && textContent) {
-                      setTextContent("");
+                {!showPreview ? (
+                  <Textarea
+                    placeholder={
+                      type === "code"
+                        ? "Paste or type your code here..."
+                        : "Type your message..."
                     }
-                    setText(newValue);
-                  }}
-                  disabled={!canView || isFrozen}
-                  onKeyDown={(e) => {
-                    // Keyboard shortcuts
-                    if (type === "text") {
-                      if ((e.ctrlKey || e.metaKey) && e.key === "b") {
-                        e.preventDefault();
-                        handleTextFormat("bold");
-                        return;
+                    ref={textareaRef}
+                    value={text}
+                    onFocus={() => setIsFocused(true)}
+                    onChange={(e) => {
+                      const newValue = e.target.value;
+                      if (type === "text" && codeContent) {
+                        setCodeContent("");
+                      } else if (type === "code" && textContent) {
+                        setTextContent("");
                       }
-                      if ((e.ctrlKey || e.metaKey) && e.key === "i") {
-                        e.preventDefault();
-                        handleTextFormat("italic");
-                        return;
-                      }
-                    } else if (type === "code") {
-                      if ((e.ctrlKey || e.metaKey) && e.key === "/") {
-                        e.preventDefault();
-                        handleCodeFormat("comment");
-                        return;
-                      }
-                      if (e.key === "Tab") {
-                        e.preventDefault();
-                        if (e.shiftKey) {
-                          handleCodeFormat("outdent");
-                        } else {
-                          handleCodeFormat("indent");
+                      setText(newValue);
+                    }}
+                    disabled={!canView || isFrozen}
+                    onKeyDown={(e) => {
+                      if (type === "text") {
+                        if ((e.ctrlKey || e.metaKey) && e.key === "b") {
+                          e.preventDefault();
+                          handleTextFormat("bold");
+                          return;
                         }
-                        return;
+                        if ((e.ctrlKey || e.metaKey) && e.key === "i") {
+                          e.preventDefault();
+                          handleTextFormat("italic");
+                          return;
+                        }
+                      } else if (type === "code") {
+                        if ((e.ctrlKey || e.metaKey) && e.key === "/") {
+                          e.preventDefault();
+                          handleCodeFormat("comment");
+                          return;
+                        }
+                        if (e.key === "Tab") {
+                          e.preventDefault();
+                          if (e.shiftKey) {
+                            handleCodeFormat("outdent");
+                          } else {
+                            handleCodeFormat("indent");
+                          }
+                          return;
+                        }
                       }
-                    }
-
-                    // Submit shortcut
-                    if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
-                      e.preventDefault();
-                      if (isFrozen || !canView) return;
-                      submit();
-                    }
-                  }}
-                  className={`
-                      flex-1 w-full resize-none border-0
-                      focus:ring-0 focus:outline-none focus-visible:ring-0 focus-visible:ring-offset-0
-                      ${type === "code" ? "font-mono text-xs leading-[1.4]" : "text-sm"}
-                      p-3 pb-12 bg-transparent
-                      scrollbar-thin scrollbar-thumb-muted scrollbar-track-transparent
-                    `}
-                />
+                      if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
+                        e.preventDefault();
+                        if (isFrozen || !canView) return;
+                        submit();
+                      }
+                    }}
+                    className={`
+                        flex-1 w-full resize-none border-0
+                        focus:ring-0 focus:outline-none focus-visible:ring-0 focus-visible:ring-offset-0
+                        ${type === "code" ? "font-mono text-xs leading-tight" : "text-xs leading-tight"}
+                        p-3 pb-12 bg-transparent
+                        scrollbar-thin scrollbar-thumb-muted scrollbar-track-transparent
+                      `}
+                  />
+                ) : (
+                  <div className={`
+                    flex-1 w-full overflow-auto
+                    ${type === "code" ? "font-mono text-xs leading-tight" : "text-xs leading-tight"}
+                    p-3 pb-12 bg-transparent
+                    scrollbar-thin scrollbar-thumb-muted scrollbar-track-transparent
+                  `}>
+                    {type === "text" ? (
+                      <div
+                        className="prose prose-sm prose-invert max-w-none"
+                        dangerouslySetInnerHTML={{ __html: previewHtml }}
+                      />
+                    ) : (
+                      <pre className="whitespace-pre-wrap">
+                        <code>{previewText}</code>
+                      </pre>
+                    )}
+                  </div>
+                )}
 
                 {/* Send button inside textarea - bottom right */}
-                <div className="absolute bottom-2 right-2 flex items-center gap-2">
+                <div className="absolute bottom-3 right-3 flex items-center gap-2 z-10">
                   {text.trim() && (
                     <Button
                       type="button"
@@ -1696,36 +2130,12 @@ export default function ClipboardInput({ code }: { code: string }) {
             </div>
           )}
 
-          {/* Activity Log - Overlay */}
-          {showActivityLog && activityLog.length > 0 && (
-            <div className="absolute bottom-16 left-4 right-4 border rounded p-3 bg-background/95 backdrop-blur-xl shadow-xl">
-              <div className="flex items-center justify-between mb-2">
-                <div className="flex items-center gap-2">
-                  <div className="w-2 h-2 rounded-full bg-primary animate-pulse" />
-                  <span className="text-xs font-medium">Activity Log</span>
-                </div>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onClick={() => setShowActivityLog(false)}
-                  className="h-6 w-6 p-0 rounded-full"
-                >
-                  ×
-                </Button>
-              </div>
-              <div className="max-h-24 overflow-y-auto space-y-1 text-[10px] font-mono scrollbar-thin scrollbar-thumb-muted scrollbar-track-transparent">
-                {activityLog.slice(0, 5).map((log, i) => (
-                  <div key={i} className="text-muted-foreground">
-                    <span className="text-primary mr-1">›</span>
-                    {log}
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
 
-          {/* Overlay for frozen/no access */}
+
+          {/* Hidden overlay only */}
           {!canView && <MaskedOverlay variant="hidden" />}
+          {/* Frozen overlay - only covers form */}
+          {isFrozen && <div className="absolute inset-0 bg-slate-900/50 backdrop-blur-sm z-50 cursor-not-allowed pointer-events-auto" />}
         </form>
       </div>
 
@@ -1737,6 +2147,118 @@ export default function ClipboardInput({ code }: { code: string }) {
         title={errorDialog.title}
         message={errorDialog.message}
       />
+
+      {/* Activity Log Bottom Sheet */}
+      {showActivityLog && activityLog.length > 0 && (
+        <div className="fixed inset-0 z-[60] flex items-end justify-center">
+          <div 
+            className="absolute inset-0 bg-black/50 backdrop-blur-sm"
+            onClick={() => setShowActivityLog(false)}
+          />
+          <div className="relative w-full max-w-md bg-background border-t border-border rounded-t-2xl shadow-2xl animate-in slide-in-from-bottom duration-300">
+            <div className="mx-auto mt-4 h-2 w-[100px] shrink-0 rounded-full bg-muted" />
+            <div className="p-6">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-10 h-10 rounded-full bg-primary/20 flex items-center justify-center">
+                  <Loader2 className="h-5 w-5 text-primary animate-spin" />
+                </div>
+                <div>
+                  <h3 className="font-semibold text-lg">Upload Activity</h3>
+                  <p className="text-sm text-muted-foreground">
+                    Processing your {type === "file" ? "file" : type} upload
+                  </p>
+                </div>
+              </div>
+              
+              <div className="space-y-1 max-h-64 overflow-y-auto scrollbar-thin scrollbar-thumb-muted scrollbar-track-transparent">
+                {activityLog.map((log, i) => (
+                  <div key={i} className="flex items-start gap-2 p-2 bg-muted/30 rounded text-[10px] font-mono">
+                    <span className="text-primary shrink-0">›</span>
+                    <span className="text-muted-foreground flex-1">{log}</span>
+                  </div>
+                ))}
+              </div>
+              
+              {!busy && (
+                <Button
+                  onClick={() => setShowActivityLog(false)}
+                  className="w-full mt-4"
+                >
+                  Close
+                </Button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Brace Check Result Bottom Sheet */}
+      {braceCheckResult.open && (
+        <div className="fixed inset-0 z-[60] flex items-end justify-center">
+          <div 
+            className="absolute inset-0 bg-black/50 backdrop-blur-sm"
+            onClick={() => setBraceCheckResult({ open: false, success: false, errors: [] })}
+          />
+          <div className="relative w-full max-w-md bg-background border-t border-border rounded-t-2xl shadow-2xl animate-in slide-in-from-bottom duration-300">
+            <div className="mx-auto mt-4 h-2 w-[100px] shrink-0 rounded-full bg-muted" />
+            <div className="p-6">
+              <div className="flex items-center gap-3 mb-4">
+                {braceCheckResult.success ? (
+                  <div className="w-10 h-10 rounded-full bg-green-500/20 flex items-center justify-center">
+                    <Check className="h-5 w-5 text-green-500" />
+                  </div>
+                ) : (
+                  <div className="w-10 h-10 rounded-full bg-destructive/20 flex items-center justify-center">
+                    <AlertTriangle className="h-5 w-5 text-destructive" />
+                  </div>
+                )}
+                <div>
+                  <h3 className="font-semibold text-lg">
+                    {braceCheckResult.success ? "All Braces Matched!" : "Brace Errors Found"}
+                  </h3>
+                  <p className="text-sm text-muted-foreground">
+                    {braceCheckResult.success 
+                      ? "Your code has no bracket mismatches" 
+                      : `${braceCheckResult.errors.length} error${braceCheckResult.errors.length > 1 ? 's' : ''} detected`}
+                  </p>
+                </div>
+              </div>
+              
+              {!braceCheckResult.success && braceCheckResult.errors.length > 0 && (
+                <div className="space-y-2 max-h-64 overflow-y-auto">
+                  {braceCheckResult.errors.map((error, i) => (
+                    <div key={i} className="flex items-start gap-3 p-3 bg-destructive/10 rounded border border-destructive/20">
+                      <div className="w-6 h-6 rounded-full bg-destructive/20 flex items-center justify-center shrink-0 mt-0.5">
+                        <span className="text-xs font-bold text-destructive">{error.line}</span>
+                      </div>
+                      <div className="flex-1">
+                        <p className="text-sm font-medium">
+                          {error.type === "unclosed" && `Unclosed '${error.char}'`}
+                          {error.type === "unexpected_close" && `Unexpected '${error.char}'`}
+                          {error.type === "mismatch" && `Mismatched '${error.char}'`}
+                        </p>
+                        <p className="text-xs text-muted-foreground mt-0.5">Line {error.line}</p>
+                        {error.lineContent && (
+                          <code className="block mt-2 text-xs bg-background/50 p-2 rounded border border-destructive/20 font-mono truncate">
+                            {error.lineContent.trim()}
+                          </code>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+              
+              <Button
+                onClick={() => setBraceCheckResult({ open: false, success: false, errors: [] })}
+                className="w-full mt-4"
+              >
+                Close
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
