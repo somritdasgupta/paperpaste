@@ -71,37 +71,7 @@ export default function RootLayout({
         {/* Global refresh scheduler for the whole webapp */}
         <GlobalRefresh interval={3000} />
         <Suspense>
-          <div className="min-h-dvh w-full flex flex-col">
-            <div className="flex-1">
-              <PageTransition>{children}</PageTransition>
-            </div>
-            {/* Site footer credits */}
-            <footer className="mt-auto w-full border-t bg-card/80 backdrop-blur-sm">
-              <div className="mx-auto w-full px-4 py-3 text-xs md:text-sm flex flex-col md:flex-row items-center justify-between gap-2">
-                <p className="font-semibold">PaperPaste</p>
-                <p className="text-muted-foreground text-center">
-                  Built by{" "}
-                  <a
-                    className="underline font-medium"
-                    href="https://github.com/somritdasgupta"
-                    target="_blank"
-                    rel="noreferrer"
-                  >
-                    Somrit Dasgupta (@somritdasgupta)
-                  </a>
-                  . Source:{" "}
-                  <a
-                    className="underline font-medium"
-                    href="https://github.com/somritdasgupta/paperpaste"
-                    target="_blank"
-                    rel="noreferrer"
-                  >
-                    github.com/somritdasgupta/paperpaste
-                  </a>
-                </p>
-              </div>
-            </footer>
-          </div>
+          <PageTransition>{children}</PageTransition>
         </Suspense>
         <Analytics />
       </body>

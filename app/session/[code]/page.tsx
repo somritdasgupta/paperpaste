@@ -57,21 +57,21 @@ export default function SessionPage({ params }: Props) {
 
   return (
     <HistoryControlsProvider sessionCode={code}>
-      <main className="relative flex flex-col h-screen w-full bg-gradient-to-br from-slate-50 via-blue-50/30 to-slate-100 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950 overflow-hidden" style={{overflow: 'hidden'}}>
+      <main className="fixed inset-0 flex flex-col bg-gradient-to-br from-slate-50 via-blue-50/30 to-slate-100 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950">
         {/* Grid Background Pattern */}
-        <div className="absolute inset-0 pointer-events-none overflow-hidden z-0">
+        <div className="absolute inset-0 pointer-events-none z-0">
           <div className="absolute inset-0 bg-[linear-gradient(to_right,#cbd5e120_1px,transparent_1px),linear-gradient(to_bottom,#cbd5e120_1px,transparent_1px)] dark:bg-[linear-gradient(to_right,#1e293b20_1px,transparent_1px),linear-gradient(to_bottom,#1e293b20_1px,transparent_1px)] bg-[size:3rem_3rem]"></div>
         </div>
 
-        {/* Compact Header - Fixed */}
-        <div className="fixed top-0 left-0 right-0 z-50 px-3 sm:px-4 py-2 sm:py-3 bg-white/60 dark:bg-slate-950/60 backdrop-blur-xl border-b border-gray-200/50 dark:border-slate-800/50 shadow-sm">
+        {/* Compact Header */}
+        <div className="shrink-0 z-50 px-3 sm:px-4 py-2 sm:py-3 bg-white/60 dark:bg-slate-950/60 backdrop-blur-xl border-b border-gray-200/50 dark:border-slate-800/50 shadow-sm">
           <div className="mx-auto w-full">
             <SessionHeader code={code} />
           </div>
         </div>
 
-        {/* Main content area - absolute positioning */}
-        <div className="absolute top-0 bottom-0 left-0 right-0 z-10 overflow-hidden pt-16 pb-[120px]">
+        {/* Main content area */}
+        <div className="flex-1 z-10 overflow-hidden">
           <Suspense
             fallback={
               <div className="p-4 text-sm text-muted-foreground animate-pulse">
@@ -83,7 +83,7 @@ export default function SessionPage({ params }: Props) {
           </Suspense>
         </div>
 
-        {/* Input section - Fixed at bottom (handled by ClipboardInput component) */}
+        {/* Input section */}
         <ClipboardInput code={code} />
 
         {/* Global Bottom Sheet */}

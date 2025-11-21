@@ -1531,11 +1531,7 @@ export default function ClipboardInput({ code }: { code: string }) {
       <HistoryControlBar />
 
       <div
-        className={`
-          bg-slate-900/90 backdrop-blur-xl border-t border-slate-700/50 shadow-2xl
-          transition-all duration-300 ease-out
-          ${isFocused ? "h-[70vh]" : "h-auto"}
-        `}
+        className="bg-slate-900/90 backdrop-blur-xl border-t border-slate-700/50 shadow-2xl"
       >
         {/* Frozen Banner */}
         {isFrozen && (
@@ -1552,7 +1548,7 @@ export default function ClipboardInput({ code }: { code: string }) {
               <Button
                 type="button"
                 variant="ghost"
-                disabled={!canView}
+                disabled={!canView || (type !== "text" && codeContent.trim() !== "")}
                 onClick={() => setType("text")}
                 size="sm"
                 className={`h-6 md:h-6 px-2.5 md:px-3 text-[10px] md:text-[11px] font-medium rounded-none border-b-2 transition-all ${
@@ -1567,7 +1563,7 @@ export default function ClipboardInput({ code }: { code: string }) {
               <Button
                 type="button"
                 variant="ghost"
-                disabled={!canView}
+                disabled={!canView || (type !== "code" && textContent.trim() !== "")}
                 onClick={() => setType("code")}
                 size="sm"
                 className={`h-6 md:h-6 px-2.5 md:px-3 text-[10px] md:text-[11px] font-medium rounded-none border-b-2 transition-all ${
@@ -2019,18 +2015,20 @@ export default function ClipboardInput({ code }: { code: string }) {
                       }
                     }}
                     className={`
-                        flex-1 w-full resize-none border-0
+                        w-full resize-none border-0
                         focus:ring-0 focus:outline-none focus-visible:ring-0 focus-visible:ring-offset-0
-                        ${type === "code" ? "font-mono text-xs leading-tight" : "text-xs leading-tight"}
-                        p-3 pb-12 bg-transparent
+                        ${type === "code" ? "font-mono text-[10px] leading-tight" : "text-[10px] leading-tight"}
+                        ${isFocused ? "h-[75vh]" : "h-24"}
+                        p-2 pb-10 bg-transparent
                         scrollbar-thin scrollbar-thumb-muted scrollbar-track-transparent
                       `}
                   />
                 ) : (
                   <div className={`
-                    flex-1 w-full overflow-auto
-                    ${type === "code" ? "font-mono text-xs leading-tight" : "text-xs leading-tight"}
-                    p-3 pb-12 bg-transparent
+                    w-full overflow-auto
+                    ${type === "code" ? "font-mono text-[10px] leading-tight" : "text-[10px] leading-tight"}
+                    ${isFocused ? "h-[75vh]" : "h-24"}
+                    p-2 pb-10 bg-transparent
                     scrollbar-thin scrollbar-thumb-muted scrollbar-track-transparent
                   `}>
                     {type === "text" ? (
