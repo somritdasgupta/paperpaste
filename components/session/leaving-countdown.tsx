@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
+import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import { LogOut } from "lucide-react";
 
@@ -11,6 +12,8 @@ export default function LeavingCountdown({
 }) {
   const [countdown, setCountdown] = useState(3);
   const router = useRouter();
+  const elRef = useRef<HTMLDivElement | null>(null);
+  const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
     if (countdown === 0) {
@@ -31,8 +34,30 @@ export default function LeavingCountdown({
     "host-left": "The host has ended the session",
   };
 
-  return (
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-background backdrop-blur-md animate-in fade-in duration-200 min-h-screen">
+  // Create portal root on mount so this overlay is appended to document.body
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    elRef.current = document.createElement("div");
+    // optional id for easier debugging
+    elRef.current.id = "pp-leaving-countdown-portal";
+    document.body.appendChild(elRef.current);
+    setMounted(true);
+    return () => {
+      if (elRef.current && document.body.contains(elRef.current)) {
+        document.body.removeChild(elRef.current);
+      }
+      elRef.current = null;
+    };
+  }, []);
+
+  const content = (
+    <div
+      // extremely high z-index and pointer-events to ensure this sits above everything
+      className="fixed inset-0 flex items-center justify-center p-4 bg-background/90 backdrop-blur-md animate-in fade-in duration-200 min-h-screen pointer-events-auto"
+      style={{ zIndex: 2147483647 }}
+      role="dialog"
+      aria-modal="true"
+    >
       <div className="w-full max-w-sm">
         <div className="bg-card border border-border rounded p-8 text-center space-y-6 animate-in zoom-in-95 duration-300">
           {/* Icon */}
@@ -63,4 +88,7 @@ export default function LeavingCountdown({
       </div>
     </div>
   );
+
+  if (typeof document === "undefined") return null;
+  return mounted && elRef.current ? createPortal(content, elRef.current) : null;
 }

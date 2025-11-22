@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useState } from "react";
+import { Suspense, useState, useEffect } from "react";
 import SessionHeader from "@/components/session/session-header";
 import ClipboardInput from "@/components/session/clipboard-input";
 import ItemsList from "@/components/session/items-list";
@@ -8,6 +8,9 @@ import PairingScreen from "@/components/session/pairing-screen";
 import { HistoryControlsProvider } from "@/components/session/history-controls-context";
 import { useSearchParams } from "next/navigation";
 import SessionBottomSheet from "@/components/session/session-bottom-sheet";
+import { saveSession } from "@/lib/session-storage";
+import { getOrCreateDeviceId } from "@/lib/device";
+import { generateSessionKey } from "@/lib/encryption";
 
 type Props = {
   params: Promise<{ code: string }>;
@@ -21,6 +24,20 @@ export default function SessionPage({ params }: Props) {
 
   // Unwrap params
   params.then((p) => setCode(p.code));
+
+  // Save session when joined - MUST be before any returns
+  useEffect(() => {
+    if (joined && code && code.length === 7) {
+      // Small delay to ensure component is fully mounted
+      const timer = setTimeout(async () => {
+        const deviceId = getOrCreateDeviceId();
+        const sessionKey = await generateSessionKey(code);
+        await saveSession(code, deviceId, sessionKey);
+        console.log('[SESSION-PAGE] Session saved after mount');
+      }, 100);
+      return () => clearTimeout(timer);
+    }
+  }, [joined, code]);
 
   // Don't render until we have the code
   if (!code) {

@@ -4,8 +4,12 @@ import { useState, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { UnifiedBottomSheet } from "@/components/session/unified-bottom-sheet";
 import { QRScanner } from "@/components/qr-scanner";
 import Footer from "@/components/ui/footer";
+import { getStoredSession } from "@/lib/session-storage";
+import { getSupabaseBrowserWithCode } from "@/lib/supabase/client";
+import { Loader2 } from "lucide-react";
 
 function EnvBanner() {
   const hasPublicUrl = !!process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -40,6 +44,87 @@ export default function HomePage() {
   const searchParams = useSearchParams();
   const [scanOpen, setScanOpen] = useState(false);
   const [prefilledCode, setPrefilledCode] = useState<string | null>(null);
+  const [checkingSession, setCheckingSession] = useState(true);
+  const [resumeSession, setResumeSession] = useState<{ code: string; deviceId: string } | null>(null);
+
+  // Auto-reconnect to last active session
+  useEffect(() => {
+    (async () => {
+      try {
+        const stored = await getStoredSession();
+        
+        if (!stored) {
+          setCheckingSession(false);
+          return;
+        }
+
+        const supabase = getSupabaseBrowserWithCode(stored.sessionCode);
+        if (!supabase) {
+          setCheckingSession(false);
+          return;
+        }
+        
+        // Check session exists
+        const { data: session, error: sessionError } = await supabase
+          .from("sessions")
+          .select("code")
+          .eq("code", stored.sessionCode)
+          .maybeSingle();
+
+        if (sessionError) {
+          console.error("[AUTO-RECONNECT] Session query error:", sessionError);
+          const { clearStoredSession } = await import("@/lib/session-storage");
+          clearStoredSession();
+          setCheckingSession(false);
+          return;
+        }
+
+        if (!session) {
+          const { clearStoredSession } = await import("@/lib/session-storage");
+          clearStoredSession();
+          setCheckingSession(false);
+          return;
+        }
+
+        // Check device exists
+        const { data: device, error: deviceError } = await supabase
+          .from("devices")
+          .select("*")
+          .eq("session_code", stored.sessionCode)
+          .eq("device_id", stored.deviceId)
+          .maybeSingle();
+
+        if (deviceError) {
+          console.error("[AUTO-RECONNECT] Device query error:", deviceError);
+          const { clearStoredSession } = await import("@/lib/session-storage");
+          clearStoredSession();
+          setCheckingSession(false);
+          return;
+        }
+
+        if (device) {
+          setResumeSession({ code: stored.sessionCode, deviceId: stored.deviceId });
+          setCheckingSession(false);
+          return;
+        }
+        
+        // Check if kicked - clear flag and show resume prompt (will trigger rejoin request)
+        const wasKicked = localStorage.getItem(`pp-kicked-${stored.sessionCode}-${stored.deviceId}`) === "1";
+        
+        if (wasKicked) {
+          setResumeSession({ code: stored.sessionCode, deviceId: stored.deviceId });
+          setCheckingSession(false);
+          return;
+        }
+        
+        const { clearStoredSession } = await import("@/lib/session-storage");
+        clearStoredSession();
+      } catch (error) {
+        console.error("[AUTO-RECONNECT] ERROR:", error);
+      }
+      setCheckingSession(false);
+    })();
+  }, [router]);
 
   useEffect(() => {
     const code = searchParams.get("code");
@@ -78,6 +163,17 @@ export default function HomePage() {
       // swallow errors and just close
     }
   };
+
+  if (checkingSession) {
+    return (
+      <main className="relative min-h-screen w-full bg-linear-to-br from-background via-background to-muted/30 flex items-center justify-center">
+        <div className="text-center space-y-4">
+          <Loader2 className="h-8 w-8 animate-spin mx-auto text-primary" />
+          <p className="text-sm text-muted-foreground">Checking for active session...</p>
+        </div>
+      </main>
+    );
+  }
 
   return (
     <main className="relative min-h-screen w-full bg-linear-to-br from-background via-background to-muted/30 flex flex-col">
@@ -161,6 +257,47 @@ export default function HomePage() {
         onClose={() => setScanOpen(false)}
         onDetected={handleQrDetected}
       />
+
+      <UnifiedBottomSheet
+        isOpen={!!resumeSession}
+        onOpenChange={(open) => !open && setResumeSession(null)}
+        title="Resume Last Session?"
+        description="You have an active session that you can continue"
+        footer={
+          <div className="flex gap-3 w-full">
+            <Button
+              variant="destructive"
+              size="lg"
+              className="flex-1 bg-red-600 hover:bg-red-700"
+              onClick={() => {
+                const { clearStoredSession } = require("@/lib/session-storage");
+                clearStoredSession();
+                setResumeSession(null);
+              }}
+            >
+              No
+            </Button>
+            <Button
+              size="lg"
+              className="flex-1 bg-green-600 hover:bg-green-700"
+              onClick={() => {
+                const wasKicked = localStorage.getItem(`pp-kicked-${resumeSession?.code}-${resumeSession?.deviceId}`) === "1";
+                if (wasKicked) {
+                  router.push(`/session/${resumeSession?.code}`);
+                } else {
+                  router.push(`/session/${resumeSession?.code}?join=1`);
+                }
+              }}
+            >
+              Yes
+            </Button>
+          </div>
+        }
+      >
+        <div className="bg-gradient-to-br from-primary/10 to-primary/5 border border-primary/20 rounded-lg p-6 text-center">
+          <div className="text-4xl font-bold font-mono tracking-wider text-primary">{resumeSession?.code}</div>
+        </div>
+      </UnifiedBottomSheet>
       
       <Footer />
     </main>

@@ -23,7 +23,7 @@ export async function generateSessionKey(sessionCode: string): Promise<CryptoKey
     },
     keyMaterial,
     { name: 'AES-GCM', length: 256 },
-    false,
+    true,
     ['encrypt', 'decrypt']
   );
 }

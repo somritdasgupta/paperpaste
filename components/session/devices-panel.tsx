@@ -40,6 +40,7 @@ import {
   ShieldCheck,
   ChevronDown,
   ChevronUp,
+  Check,
 } from "lucide-react";
 import MaskedOverlay from "@/components/ui/masked-overlay";
 import { useHistoryControls } from "./history-controls-context";
@@ -58,6 +59,15 @@ type Device = {
   created_at: string;
 };
 
+type JoinRequest = {
+  id: string;
+  device_id: string;
+  device_name_encrypted: string;
+  device_name?: string;
+  status: string;
+  created_at: string;
+};
+
 export default function DevicesPanel({ code }: { code: string }) {
   const { 
     openBottomSheet, 
@@ -72,6 +82,7 @@ export default function DevicesPanel({ code }: { code: string }) {
   
   const supabase = getSupabaseBrowserWithCode(code);
   const [devices, setDevices] = useState<Device[]>([]);
+  const [joinRequests, setJoinRequests] = useState<JoinRequest[]>([]);
   const [selfId, setSelfId] = useState<string>("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState<{ [key: string]: boolean }>({});
@@ -117,6 +128,41 @@ export default function DevicesPanel({ code }: { code: string }) {
           export_enabled: sessionData.export_enabled ?? true,
           allow_item_deletion: sessionData.allow_item_deletion ?? true
         });
+      }
+
+      // Fetch join requests if host
+      const me = await supabase
+        .from("devices")
+        .select("is_host")
+        .eq("session_code", code)
+        .eq("device_id", selfId)
+        .single();
+
+      if (me.data?.is_host) {
+        const { data: requests } = await supabase
+          .from("join_requests")
+          .select("*")
+          .eq("session_code", code)
+          .eq("status", "pending")
+          .order("created_at", { ascending: true });
+
+        if (requests) {
+          const decryptedRequests = await Promise.all(
+            requests.map(async (r) => {
+              let deviceName = "Anonymous Device";
+              if (r.device_name_encrypted) {
+                try {
+                  const { decryptDeviceName } = await import("@/lib/encryption");
+                  deviceName = await decryptDeviceName(r.device_name_encrypted, sessionKey);
+                } catch (e) {
+                  console.warn("Failed to decrypt device name:", e);
+                }
+              }
+              return { ...r, device_name: deviceName };
+            })
+          );
+          setJoinRequests(decryptedRequests);
+        }
       }
 
       const { data, error } = await supabase
@@ -199,6 +245,18 @@ export default function DevicesPanel({ code }: { code: string }) {
       .on(
         "postgres_changes",
         {
+          event: "*",
+          schema: "public",
+          table: "join_requests",
+          filter: `session_code=eq.${code}`,
+        },
+        () => {
+          fetchDevices();
+        }
+      )
+      .on(
+        "postgres_changes",
+        {
           event: "UPDATE",
           schema: "public",
           table: "sessions",
@@ -264,10 +322,18 @@ export default function DevicesPanel({ code }: { code: string }) {
 
       if (error) throw error;
       
+      // Clear any existing join requests
+      await supabase
+        .from("join_requests")
+        .delete()
+        .eq("session_code", code)
+        .eq("device_id", targetDeviceId);
+      
+      // Broadcast kick event so device can mark itself as kicked
       await supabase.channel(`view-permissions-${code}`).send({
         type: "broadcast",
         event: "device_kicked",
-        payload: { device_id: targetDeviceId },
+        payload: { device_id: targetDeviceId, session_code: code },
       });
       
       setDevices((prev) => prev.filter((d) => d.device_id !== targetDeviceId));
@@ -276,6 +342,42 @@ export default function DevicesPanel({ code }: { code: string }) {
       setError(e.message);
     } finally {
       setLoading((prev) => ({ ...prev, [targetDeviceId]: false }));
+    }
+  };
+
+  const approveJoinRequest = async (requestId: string, deviceId: string) => {
+    if (!supabase || !isHost) return;
+    setLoading((prev) => ({ ...prev, [`approve-${requestId}`]: true }));
+
+    try {
+      await supabase
+        .from("join_requests")
+        .update({ status: "approved" })
+        .eq("id", requestId);
+
+      setJoinRequests((prev) => prev.filter((r) => r.id !== requestId));
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setLoading((prev) => ({ ...prev, [`approve-${requestId}`]: false }));
+    }
+  };
+
+  const rejectJoinRequest = async (requestId: string) => {
+    if (!supabase || !isHost) return;
+    setLoading((prev) => ({ ...prev, [`reject-${requestId}`]: true }));
+
+    try {
+      await supabase
+        .from("join_requests")
+        .update({ status: "rejected" })
+        .eq("id", requestId);
+
+      setJoinRequests((prev) => prev.filter((r) => r.id !== requestId));
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setLoading((prev) => ({ ...prev, [`reject-${requestId}`]: false }));
     }
   };
 
@@ -449,8 +551,11 @@ export default function DevicesPanel({ code }: { code: string }) {
         .eq("session_code", code)
         .eq("device_id", deviceId);
         
+      // Clear all session data
       localStorage.removeItem(`pp-host-${code}`);
       localStorage.removeItem(`pp-joined-${code}`);
+      const { clearStoredSession } = await import("@/lib/session-storage");
+      clearStoredSession();
       window.location.href = "/";
     } catch (e: any) {
       setError(e.message);
@@ -479,8 +584,11 @@ export default function DevicesPanel({ code }: { code: string }) {
 
       if (leaveError) throw leaveError;
 
+      // Clear all session data
       localStorage.removeItem(`pp-host-${code}`);
       localStorage.removeItem(`pp-joined-${code}`);
+      const { clearStoredSession } = await import("@/lib/session-storage");
+      clearStoredSession();
       window.location.href = "/";
     } catch (e: any) {
       setError(e.message);
@@ -610,6 +718,41 @@ export default function DevicesPanel({ code }: { code: string }) {
         )}
 
         <div className="px-3 py-2 space-y-2">
+          {/* Join Requests Notification */}
+          {isHost && joinRequests.length > 0 && (
+            <div className="bg-blue-500/10 border border-blue-500/30 rounded p-3 space-y-2">
+              <div className="flex items-center gap-2 text-sm font-medium text-blue-600 dark:text-blue-400">
+                <UserCheck className="h-4 w-4" />
+                <span>{joinRequests.length} Rejoin Request{joinRequests.length > 1 ? "s" : ""}</span>
+              </div>
+              {joinRequests.map((req) => (
+                <div key={req.id} className="flex items-center justify-between bg-background/50 rounded p-2">
+                  <span className="text-xs truncate flex-1">{req.device_name}</span>
+                  <div className="flex gap-1">
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => approveJoinRequest(req.id, req.device_id)}
+                      disabled={loading[`approve-${req.id}`]}
+                      className="h-7 px-2 text-xs text-green-600 hover:bg-green-500/20"
+                    >
+                      {loading[`approve-${req.id}`] ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => rejectJoinRequest(req.id)}
+                      disabled={loading[`reject-${req.id}`]}
+                      className="h-7 px-2 text-xs text-red-600 hover:bg-red-500/20"
+                    >
+                      {loading[`reject-${req.id}`] ? <Loader2 className="h-3 w-3 animate-spin" /> : <Ban className="h-3 w-3" />}
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
           {/* Verification Button */}
           <button
             onClick={() => openBottomSheet("verification", { sessionKey })}

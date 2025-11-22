@@ -340,6 +340,7 @@ export default function ItemsList({ code }: { code: string }) {
       })
       .on("broadcast", { event: "device_kicked" }, (payload) => {
         if (payload.payload.device_id === deviceId) {
+          localStorage.setItem(`pp-kicked-${payload.payload.session_code}-${deviceId}`, "1");
           localStorage.removeItem(`pp-host-${code}`);
           localStorage.removeItem(`pp-joined-${code}`);
           setLeaveReason("kicked");
