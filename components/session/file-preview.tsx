@@ -92,27 +92,15 @@ export default function FilePreview({
     // Image preview
     if (mimeType.startsWith("image/")) {
       return (
-        <div className="flex justify-center items-center bg-muted/30 rounded-sm p-2 sm:p-4 min-h-[150px] sm:min-h-[200px] overflow-auto">
+        <div className="flex justify-center items-center bg-muted/20 rounded-lg p-3 sm:p-4 min-h-[200px] overflow-hidden">
           <img
             src={fileUrl}
             alt={fileName}
-            className="max-w-full max-h-full object-contain rounded-sm shadow-sm"
+            className="max-w-full h-auto object-contain rounded-md shadow-md"
             style={{
-              maxHeight: "60vh",
-              maxWidth: "100%",
-              width: "auto",
-              height: "auto",
+              maxHeight: "min(60vh, 500px)",
             }}
-            onLoad={(e) => {
-              setLoading(false);
-              // Auto-adjust container to content
-              const img = e.target as HTMLImageElement;
-              const container = img.parentElement;
-              if (container && img.naturalWidth && img.naturalHeight) {
-                const aspectRatio = img.naturalWidth / img.naturalHeight;
-                container.style.aspectRatio = aspectRatio.toString();
-              }
-            }}
+            onLoad={() => setLoading(false)}
             onError={() => {
               setError("Failed to load image");
               setLoading(false);
@@ -146,25 +134,12 @@ export default function FilePreview({
     // Video preview
     if (mimeType.startsWith("video/")) {
       return (
-        <div className="flex justify-center bg-muted/30 rounded-sm p-2 sm:p-4">
+        <div className="flex justify-center bg-black/90 rounded-lg p-2 sm:p-3">
           <video
             controls
-            className="w-full max-h-[60vh] rounded-sm shadow-sm"
-            style={{
-              maxWidth: "100%",
-              height: "auto",
-            }}
+            className="w-full max-h-[60vh] rounded-md"
             onLoadStart={() => setLoading(true)}
-            onLoadedMetadata={(e) => {
-              setLoading(false);
-              // Auto-adjust container to video dimensions
-              const video = e.target as HTMLVideoElement;
-              const container = video.parentElement;
-              if (container && video.videoWidth && video.videoHeight) {
-                const aspectRatio = video.videoWidth / video.videoHeight;
-                container.style.aspectRatio = aspectRatio.toString();
-              }
-            }}
+            onLoadedMetadata={() => setLoading(false)}
             onError={() => {
               setError("Failed to load video");
               setLoading(false);
@@ -180,17 +155,11 @@ export default function FilePreview({
     // PDF preview
     if (mimeType === "application/pdf") {
       return (
-        <div
-          className="relative bg-muted/30 rounded-sm"
-          style={{ height: "60vh", minHeight: "300px" }}
-        >
+        <div className="relative bg-muted/20 rounded-lg overflow-hidden" style={{ height: "min(70vh, 600px)" }}>
           <iframe
             src={`${fileUrl}#view=FitH`}
-            className="w-full h-full rounded-sm border"
+            className="w-full h-full rounded-lg border-0"
             title={fileName}
-            style={{
-              minHeight: "300px",
-            }}
             onLoad={() => setLoading(false)}
             onError={() => {
               setError("Failed to load PDF");
@@ -256,31 +225,32 @@ export default function FilePreview({
       )}
 
       <Dialog open={showPreview} onOpenChange={setShowPreview}>
-        <DialogContent className="max-w-[95vw] max-h-[85vh] w-full sm:max-w-4xl overflow-hidden">
-          <DialogHeader className="pb-2 flex-shrink-0">
-            <DialogTitle className="flex items-center gap-2 text-sm sm:text-base break-words">
+        <DialogContent className="max-w-[96vw] max-h-[90vh] w-full sm:max-w-5xl flex flex-col p-0 gap-0 overflow-hidden">
+          <DialogHeader className="p-4 sm:p-6 pb-3 sm:pb-4 border-b flex-shrink-0">
+            <DialogTitle className="flex items-center gap-2.5 text-base sm:text-lg">
               {getFileIcon()}
-              <span className="break-all text-left">{fileName}</span>
+              <span className="truncate flex-1 text-left">{fileName}</span>
             </DialogTitle>
-            <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-              <Badge variant="secondary" className="text-xs px-2 py-0.5">
+            <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground mt-2">
+              <Badge variant="secondary" className="text-xs px-2.5 py-0.5 font-mono">
                 {mimeType}
               </Badge>
+              <span>•</span>
               <span>{formatFileSize(size)}</span>
             </div>
           </DialogHeader>
-          <div className="flex-1 min-h-0 overflow-auto">{renderPreview()}</div>
-          <DialogFooter className="pt-3 flex-col sm:flex-row gap-2">
+          <div className="flex-1 min-h-0 overflow-auto p-3 sm:p-4">{renderPreview()}</div>
+          <DialogFooter className="p-4 sm:p-6 pt-3 sm:pt-4 border-t flex-shrink-0 flex-row gap-2 sm:gap-3">
             <Button
               variant="outline"
               onClick={() => setShowPreview(false)}
-              className="w-full sm:w-auto order-2 sm:order-1"
+              className="flex-1 sm:flex-none sm:min-w-[100px]"
             >
               Close
             </Button>
             <Button
               onClick={onDownload}
-              className="w-full sm:w-auto order-1 sm:order-2"
+              className="flex-1 sm:flex-none sm:min-w-[120px]"
             >
               <Download className="h-4 w-4 mr-2" />
               Download

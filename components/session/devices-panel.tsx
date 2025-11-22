@@ -75,6 +75,7 @@ export default function DevicesPanel({ code }: { code: string }) {
   const [selfId, setSelfId] = useState<string>("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState<{ [key: string]: boolean }>({});
+  const [isLoadingDevices, setIsLoadingDevices] = useState(true);
   const [sessionKey, setSessionKey] = useState<CryptoKey | null>(null);
   const [showTransferHost, setShowTransferHost] = useState(false);
   const [selectedNewHost, setSelectedNewHost] = useState("");
@@ -97,8 +98,12 @@ export default function DevicesPanel({ code }: { code: string }) {
 
   // Fetch devices and session settings
   const fetchDevices = async () => {
-    if (!supabase || !sessionKey) return;
+    if (!supabase || !sessionKey) {
+      setIsLoadingDevices(false);
+      return;
+    }
 
+    setIsLoadingDevices(true);
     try {
       // Fetch session settings
       const { data: sessionData } = await supabase
@@ -161,16 +166,21 @@ export default function DevicesPanel({ code }: { code: string }) {
     } catch (e: any) {
       console.error("Error fetching devices:", e);
       setError(e.message);
+    } finally {
+      setIsLoadingDevices(false);
     }
   };
 
   // Initial fetch and subscriptions
   useEffect(() => {
-    if (!supabase) return;
+    if (!supabase || !sessionKey) return;
 
-    if (sessionKey) {
+    fetchDevices();
+    
+    // Periodic refresh every 30s as fallback
+    const refreshInterval = setInterval(() => {
       fetchDevices();
-    }
+    }, 30000);
 
     const channel = supabase
       .channel(`view-permissions-${code}`)
@@ -206,7 +216,12 @@ export default function DevicesPanel({ code }: { code: string }) {
           }
         }
       )
-      .subscribe();
+      .subscribe((status) => {
+        if (status === 'CHANNEL_ERROR') {
+          console.log('Channel error, reconnecting...');
+          fetchDevices();
+        }
+      });
       
     setBroadcastChannel(channel);
       
@@ -215,6 +230,7 @@ export default function DevicesPanel({ code }: { code: string }) {
     });
 
     return () => {
+      clearInterval(refreshInterval);
       supabase.removeChannel(channel);
       unsubscribeGlobal();
     };
@@ -908,7 +924,13 @@ export default function DevicesPanel({ code }: { code: string }) {
               </div>
             );
           })}
-          {devices.length === 0 && !error && (
+          {isLoadingDevices && devices.length === 0 && (
+            <div className="text-center text-zinc-500 text-sm py-8 flex flex-col items-center gap-2">
+              <Loader2 className="h-5 w-5 animate-spin" />
+              <span>Loading devices...</span>
+            </div>
+          )}
+          {!isLoadingDevices && devices.length === 0 && !error && (
             <div className="text-center text-zinc-500 text-sm py-8">
               No devices connected yet.
             </div>

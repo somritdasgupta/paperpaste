@@ -27,6 +27,7 @@ import {
   Globe,
   QrCode as QrCodeIcon,
 } from "lucide-react";
+import Footer from "@/components/ui/footer";
 
 export default function PairingScreen({
   code,
@@ -274,7 +275,7 @@ export default function PairingScreen({
   };
 
   return (
-    <main className="min-h-full bg-linear-to-br from-background via-background to-muted/30 flex items-center justify-center p-4 py-8">
+    <main className="min-h-screen bg-linear-to-br from-background via-background to-muted/30 flex flex-col">
       {/* Background Graphics - Fixed */}
       <div className="fixed inset-0 pointer-events-none overflow-hidden z-0">
         {/* Grid pattern */}
@@ -288,7 +289,8 @@ export default function PairingScreen({
         ></div>
       </div>
 
-      <div className="relative z-10 w-full max-w-3xl mx-auto">
+      <div className="relative z-10 w-full max-w-3xl mx-auto flex-1 flex items-center justify-center p-4 py-8">
+        <div className="w-full">
         {/* Single Modern Card */}
         <Card className="p-6 sm:p-10 border-2 hover:border-primary/20 transition-colors backdrop-blur-sm bg-card/95">
           <CardContent className="space-y-8 p-0">
@@ -493,7 +495,10 @@ export default function PairingScreen({
             End-to-end encrypted • No data stored on servers
           </p>
         </div>
+        </div>
       </div>
+      
+      <Footer />
     </main>
   );
 }

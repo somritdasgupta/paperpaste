@@ -29,6 +29,7 @@ import {
 import MaskedOverlay from "@/components/ui/masked-overlay";
 import LeavingCountdown from "./leaving-countdown";
 import { useHistoryControls } from "./history-controls-context";
+import FilePreview from "./file-preview";
 
 type Item = {
   id: string;
@@ -102,7 +103,10 @@ export default function ItemsList({ code }: { code: string }) {
     controls.setAutoRefreshEnabled(autoRefreshEnabled);
     controls.setAutoRefreshInterval(autoRefreshInterval);
     controls.setDeletionEnabled(permissions.delete);
-  }, [connectionStatus, items.length, permissions, isHost, autoRefreshEnabled, autoRefreshInterval, controls]);
+    controls.setItems(items);
+    controls.setSessionKey(sessionKey);
+    controls.setDeviceId(deviceId);
+  }, [connectionStatus, items, permissions, isHost, autoRefreshEnabled, autoRefreshInterval, sessionKey, deviceId, controls]);
 
   useEffect(() => {
     const handleManualRefresh = () => fetchAndDecryptItems(false);
@@ -458,14 +462,14 @@ export default function ItemsList({ code }: { code: string }) {
               return (
                 <div
                   key={item.id}
-                  className={`group relative border backdrop-blur-md overflow-hidden ${
+                  className={`group relative border backdrop-blur-md overflow-hidden transition-all duration-300 ease-out ${
                     isExpanded
                       ? "border-white/20 dark:border-white/10 bg-white/10 dark:bg-white/5 pb-3 shadow-lg shadow-black/5 dark:shadow-black/20"
                       : "border-white/10 dark:border-white/5 bg-white/5 dark:bg-white/3 hover:bg-white/15 dark:hover:bg-white/8 shadow-sm shadow-black/5"
                   }`}
                 >
                   <div className="flex items-center gap-2 p-2 px-3 h-10">
-                    <button onClick={() => toggleExpanded(item.id)} className="text-gray-500 dark:text-zinc-500 hover:text-gray-900 dark:hover:text-zinc-200 shrink-0">
+                    <button onClick={() => toggleExpanded(item.id)} className="text-gray-500 dark:text-zinc-500 hover:text-gray-900 dark:hover:text-zinc-200 shrink-0 transition-all duration-200 ease-out hover:scale-110">
                       {isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
                     </button>
                     <span className="text-gray-500 dark:text-zinc-600 text-[9px] shrink-0 font-bold">{timestamp}</span>
@@ -486,39 +490,108 @@ export default function ItemsList({ code }: { code: string }) {
                       </>
                     )}
                     <div className="flex items-center gap-1 ml-auto shrink-0">
-                      <Button variant="ghost" size="icon" className="h-6 w-6 text-gray-700 dark:text-zinc-400 hover:text-gray-900 dark:hover:text-zinc-100 hover:bg-gray-200/80 dark:hover:bg-zinc-800" onClick={(e) => { e.stopPropagation(); copyToClipboard(item.content || "", item.id); }} title="Copy content">
+                      {item.kind === "file" && item.file_download_url && (
+                        <FilePreview
+                          fileName={item.file_name || "file"}
+                          fileUrl={item.file_download_url}
+                          mimeType={item.file_mime_type || "application/octet-stream"}
+                          size={item.file_size || 0}
+                          onDownload={() => {
+                            const a = document.createElement('a');
+                            a.href = item.file_download_url!;
+                            a.download = item.file_name || 'file';
+                            a.click();
+                          }}
+                        />
+                      )}
+                      <Button variant="ghost" size="icon" className="h-6 w-6 text-gray-700 dark:text-zinc-400 hover:text-gray-900 dark:hover:text-zinc-100 hover:bg-gray-200/80 dark:hover:bg-zinc-800 transition-all duration-200 hover:scale-110" onClick={(e) => { e.stopPropagation(); copyToClipboard(item.content || "", item.id); }} title="Copy content">
                         {isCopied ? <Check className="h-3.5 w-3.5 text-green-500" /> : <Copy className="h-3.5 w-3.5" />}
                       </Button>
                       {permissions.export && (
                         item.kind === "file" && item.file_download_url ? (
-                          <a href={item.file_download_url} download={item.file_name} className="inline-flex items-center justify-center h-6 w-6 text-zinc-500 hover:text-zinc-100 hover:bg-zinc-800 rounded-md" title="Download file" onClick={(e) => e.stopPropagation()}>
+                          <a href={item.file_download_url} download={item.file_name} className="inline-flex items-center justify-center h-6 w-6 text-zinc-500 hover:text-zinc-100 hover:bg-zinc-800 rounded-md transition-all duration-200 hover:scale-110" title="Download file" onClick={(e) => e.stopPropagation()}>
                             <Download className="h-3.5 w-3.5" />
                           </a>
                         ) : (
-                          <Button variant="ghost" size="icon" className="h-6 w-6 text-zinc-500 hover:text-zinc-100 hover:bg-zinc-800" onClick={(e) => { e.stopPropagation(); const blob = new Blob([item.content || ''], { type: 'text/plain' }); const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = `${item.kind}-${item.id.substring(0, 8)}.txt`; a.click(); URL.revokeObjectURL(url); }} title="Download as text">
+                          <Button variant="ghost" size="icon" className="h-6 w-6 text-zinc-500 hover:text-zinc-100 hover:bg-zinc-800 transition-all duration-200 hover:scale-110" onClick={(e) => { e.stopPropagation(); const blob = new Blob([item.content || ''], { type: 'text/plain' }); const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = `${item.kind}-${item.id.substring(0, 8)}.txt`; a.click(); URL.revokeObjectURL(url); }} title="Download as text">
                             <Download className="h-3.5 w-3.5" />
                           </Button>
                         )
                       )}
-                      <Button variant="ghost" size="icon" className="h-6 w-6 text-zinc-500 hover:text-green-400 hover:bg-zinc-800" onClick={(e) => { e.stopPropagation(); openBottomSheet("verification", { isItemVerification: true, itemType: item.kind, sessionKey }); }} title="Verify Integrity">
+                      <Button variant="ghost" size="icon" className="h-6 w-6 text-zinc-500 hover:text-green-400 hover:bg-zinc-800 transition-all duration-200 hover:scale-110" onClick={(e) => { e.stopPropagation(); openBottomSheet("verification", { isItemVerification: true, itemType: item.kind, sessionKey }); }} title="Verify Integrity">
                         <ShieldCheck className="h-3.5 w-3.5" />
                       </Button>
                       {permissions.delete && item.device_id === deviceId && (
-                        <Button variant="ghost" size="icon" className="h-6 w-6 text-zinc-500 hover:text-red-400 hover:bg-zinc-800" onClick={(e) => { e.stopPropagation(); openBottomSheet("delete-item", { itemId: item.id }); }} title="Delete item">
+                        <Button variant="ghost" size="icon" className="h-6 w-6 text-zinc-500 hover:text-red-400 hover:bg-zinc-800 transition-all duration-200 hover:scale-110" onClick={(e) => { e.stopPropagation(); openBottomSheet("delete-item", { itemId: item.id }); }} title="Delete item">
                           <Trash2 className="h-3.5 w-3.5" />
                         </Button>
                       )}
                     </div>
                   </div>
                   {isExpanded && (
-                    <div className="px-3 pl-9 mt-2">
-                      <div className="bg-zinc-900/30 rounded border border-zinc-800">
-                        <div className="max-h-96 overflow-y-auto p-4 scrollbar-thin scrollbar-thumb-zinc-700">
-                          {item.kind === "text" && <div className="text-sm leading-relaxed text-zinc-200 whitespace-pre-wrap break-words">{item.content}</div>}
-                          {item.kind === "code" && <pre className="text-xs text-zinc-200 whitespace-pre-wrap break-words font-mono leading-relaxed"><code>{item.content}</code></pre>}
+                    <div className="px-3 mt-1 animate-in slide-in-from-top-2 fade-in duration-300 space-y-1">
+                      {/* Metadata Section */}
+                      <div className="bg-zinc-900/20 border border-zinc-800/50 p-1.5">
+                        <div className="text-[10px] font-semibold text-zinc-400 mb-1">Metadata</div>
+                        <div className="grid grid-cols-2 gap-1 text-[10px]">
+                          <div>
+                            <span className="text-zinc-500">Type:</span>
+                            <span className="ml-2 text-zinc-300 font-medium">{item.kind}</span>
+                          </div>
+                          <div>
+                            <span className="text-zinc-500">Device:</span>
+                            <span className="ml-2 text-zinc-300 font-medium">{item.device_name || "Unknown"}</span>
+                          </div>
+                          <div>
+                            <span className="text-zinc-500">Created:</span>
+                            <span className="ml-2 text-zinc-300 font-medium">
+                              {item.display_created_at ? item.display_created_at.toLocaleString() : new Date(item.created_at).toLocaleString()}
+                            </span>
+                          </div>
+                          <div>
+                            <span className="text-zinc-500">Item ID:</span>
+                            <span className="ml-2 text-zinc-300 font-mono text-[10px]">{item.id.substring(0, 8)}...</span>
+                          </div>
                           {item.kind === "file" && (
-                            <div className="flex items-start gap-4 p-3 bg-zinc-900/50 rounded border border-zinc-800">
-                              <div className="p-3 bg-zinc-950 rounded text-zinc-400">{getContentIcon("file", item.file_mime_type)}</div>
+                            <>
+                              <div>
+                                <span className="text-zinc-500">File Size:</span>
+                                <span className="ml-2 text-zinc-300 font-medium">
+                                  {item.file_size && item.file_size > 1024 * 1024 
+                                    ? `${(item.file_size / (1024 * 1024)).toFixed(2)} MB` 
+                                    : `${Math.round((item.file_size || 0) / 1024)} KB`}
+                                </span>
+                              </div>
+                              <div>
+                                <span className="text-zinc-500">MIME Type:</span>
+                                <span className="ml-2 text-zinc-300 font-mono text-[10px]">{item.file_mime_type}</span>
+                              </div>
+                            </>
+                          )}
+                          {(item.kind === "text" || item.kind === "code") && item.content && (
+                            <div>
+                              <span className="text-zinc-500">Length:</span>
+                              <span className="ml-2 text-zinc-300 font-medium">{item.content.length} characters</span>
+                            </div>
+                          )}
+                          <div>
+                            <span className="text-zinc-500">Encryption:</span>
+                            <span className="ml-2 text-green-400 font-medium">AES-256-GCM</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Content Section */}
+                      <div className="bg-zinc-900/30 border border-zinc-800">
+                        <div className="px-1.5 py-1 border-b border-zinc-800/50">
+                          <span className="text-[10px] font-semibold text-zinc-400">Content</span>
+                        </div>
+                        <div className="max-h-60 overflow-y-auto p-1.5 scrollbar-thin scrollbar-thumb-zinc-700">
+                          {item.kind === "text" && <div className="text-xs leading-snug text-zinc-200 whitespace-pre-wrap break-words">{item.content}</div>}
+                          {item.kind === "code" && <pre className="text-[10px] text-zinc-200 whitespace-pre-wrap break-words font-mono leading-snug"><code>{item.content}</code></pre>}
+                          {item.kind === "file" && (
+                            <div className="flex items-start gap-2 p-1.5 bg-zinc-900/50 border border-zinc-800">
+                              <div className="p-1.5 bg-zinc-950 text-zinc-400">{getContentIcon("file", item.file_mime_type)}</div>
                               <div className="flex-1">
                                 <p className="font-medium text-zinc-200 mb-1">{item.file_name}</p>
                                 <p className="text-xs text-zinc-500">

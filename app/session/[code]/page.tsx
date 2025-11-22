@@ -64,7 +64,7 @@ export default function SessionPage({ params }: Props) {
         </div>
 
         {/* Compact Header */}
-        <div className="shrink-0 z-50 px-3 sm:px-4 py-2 sm:py-3 bg-white/60 dark:bg-slate-950/60 backdrop-blur-xl border-b border-gray-200/50 dark:border-slate-800/50 shadow-sm">
+        <div className="shrink-0 z-50 px-4 sm:px-6 py-3 sm:py-4 bg-white/60 dark:bg-slate-950/60 backdrop-blur-xl border-b border-gray-200/50 dark:border-slate-800/50 shadow-sm">
           <div className="mx-auto w-full">
             <SessionHeader code={code} />
           </div>

@@ -159,8 +159,8 @@ export default function JoinForm({ prefilledCode }: JoinFormProps) {
   }, [prefilledCode]);
 
   return (
-    <form onSubmit={onJoin} className="flex flex-col gap-4 sm:gap-6">
-      <div className="grid grid-cols-7 gap-2 sm:gap-3 max-w-sm sm:max-w-md mx-auto">
+    <form onSubmit={onJoin} className="flex flex-col gap-6 sm:gap-8">
+      <div className="grid grid-cols-7 gap-1.5 sm:gap-3 max-w-xs sm:max-w-md mx-auto w-full">
         {digits.map((d, i) => (
           <Input
             key={i}
@@ -177,16 +177,16 @@ export default function JoinForm({ prefilledCode }: JoinFormProps) {
             disabled={isValidating}
             aria-label={`Digit ${i + 1}`}
             className={cn(
-              "h-10 sm:h-12 md:h-14",
-              "text-base sm:text-lg md:text-2xl",
-              "text-center font-medium session-code",
-              "min-w-0 flex-1 px-1 sm:px-2",
+              "aspect-square h-auto w-full",
+              "text-lg sm:text-2xl md:text-3xl",
+              "text-center font-semibold session-code",
+              "p-0",
               "border-2 focus:border-primary",
-              "rounded-sm transition-all duration-200",
-              "touch-manipulation", // Improves touch responsiveness
-              "selection:bg-primary/20", // Better text selection color
-              "shadow-[0_0_15px_rgba(112,51,255,0.3)]", // Blue glow
-              "focus:shadow-[0_0_20px_rgba(112,51,255,0.5)]", // Stronger glow on focus
+              "rounded-md transition-all duration-200",
+              "touch-manipulation",
+              "selection:bg-primary/20",
+              "shadow-[0_0_15px_rgba(112,51,255,0.3)]",
+              "focus:shadow-[0_0_20px_rgba(112,51,255,0.5)]",
               validationError &&
                 "border-destructive focus-visible:ring-destructive",
               isValidating && "opacity-50"
@@ -196,22 +196,22 @@ export default function JoinForm({ prefilledCode }: JoinFormProps) {
       </div>
 
       {validationError && (
-        <div className="text-sm text-destructive text-center bg-destructive/10 border border-destructive/20 rounded-sm p-2 max-w-md mx-auto">
+        <div className="text-sm sm:text-base text-destructive text-center bg-destructive/10 border border-destructive/20 rounded-md p-3 max-w-md mx-auto">
           {validationError}
         </div>
       )}
 
       {isValidating && (
-        <div className="text-sm text-muted-foreground text-center">
+        <div className="text-sm sm:text-base text-muted-foreground text-center">
           Validating session code...
         </div>
       )}
 
-      <div className="flex flex-col sm:flex-row gap-3 sm:gap-2 max-w-md mx-auto w-full">
+      <div className="flex flex-col sm:flex-row gap-4 sm:gap-3 max-w-md mx-auto w-full px-2">
         <Button
           type="submit"
           variant="default"
-          className="w-full sm:flex-1"
+          className="w-full sm:flex-1 h-12 sm:h-11 text-base font-medium"
           disabled={isValidating || cleanedJoin().length !== 7}
         >
           {isValidating ? "Validating..." : "Join Session"}
@@ -220,7 +220,7 @@ export default function JoinForm({ prefilledCode }: JoinFormProps) {
           type="button"
           variant="secondary"
           onClick={() => onCreateWithCode(prefilledCode)}
-          className="w-full sm:flex-1"
+          className="w-full sm:flex-1 h-12 sm:h-11 text-base font-medium"
           disabled={isValidating}
         >
           Create New

@@ -13,6 +13,9 @@ type HistoryControlsContextType = {
   isRefreshing: boolean;
   autoRefreshInterval: number;
   deletionEnabled: boolean;
+  items: any[];
+  sessionKey: CryptoKey | null;
+  deviceId: string;
   bottomSheet: {
     isOpen: boolean;
     view: "devices" | "qr" | "verification" | "delete-item" | "leave-session" | "kill-session" | null;
@@ -28,6 +31,9 @@ type HistoryControlsContextType = {
   setIsRefreshing: (refreshing: boolean) => void;
   setAutoRefreshInterval: (interval: number) => void;
   setDeletionEnabled: (enabled: boolean) => void;
+  setItems: (items: any[]) => void;
+  setSessionKey: (key: CryptoKey | null) => void;
+  setDeviceId: (id: string) => void;
   
   toggleAutoRefresh: () => void;
   handleManualRefresh: () => void;
@@ -59,6 +65,9 @@ export function HistoryControlsProvider({
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [autoRefreshInterval, setAutoRefreshInterval] = useState(5000);
   const [deletionEnabled, setDeletionEnabled] = useState(true);
+  const [items, setItems] = useState<any[]>([]);
+  const [sessionKey, setSessionKey] = useState<CryptoKey | null>(null);
+  const [deviceId, setDeviceId] = useState("");
 
   // Bottom Sheet State
   const [bottomSheet, setBottomSheet] = useState<HistoryControlsContextType["bottomSheet"]>({
@@ -107,6 +116,9 @@ export function HistoryControlsProvider({
         isRefreshing,
         autoRefreshInterval,
         deletionEnabled,
+        items,
+        sessionKey,
+        deviceId,
         bottomSheet,
         
         setConnectionStatus,
@@ -118,6 +130,9 @@ export function HistoryControlsProvider({
         setIsRefreshing,
         setAutoRefreshInterval,
         setDeletionEnabled,
+        setItems,
+        setSessionKey,
+        setDeviceId,
         
         toggleAutoRefresh,
         handleManualRefresh,

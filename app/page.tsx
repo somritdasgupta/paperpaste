@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { QRScanner } from "@/components/qr-scanner";
+import Footer from "@/components/ui/footer";
 
 function EnvBanner() {
   const hasPublicUrl = !!process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -79,7 +80,7 @@ export default function HomePage() {
   };
 
   return (
-    <main className="relative min-h-screen w-full bg-linear-to-br from-background via-background to-muted/30 flex items-center justify-center">
+    <main className="relative min-h-screen w-full bg-linear-to-br from-background via-background to-muted/30 flex flex-col">
       {/* Background Graphics */}
       <div className="fixed inset-0 pointer-events-none overflow-hidden z-0">
         {/* Gradient orbs */}
@@ -116,19 +117,19 @@ export default function HomePage() {
         </svg>
       </div>
 
-      <div className="relative z-10 w-full max-w-2xl mx-auto px-4 sm:px-6 lg:px-8 my-auto">
-        <div className="w-full space-y-6 sm:space-y-8">
+      <div className="relative z-10 w-full max-w-2xl mx-auto px-4 sm:px-8 lg:px-10 flex-1 flex items-center justify-center py-8 sm:py-12">
+        <div className="w-full space-y-6 sm:space-y-10">
           {/* Header Section */}
-          <div className="text-center space-y-4">
-            <div className="inline-flex items-center gap-3 mb-2">
-              <div className="p-2 rounded bg-primary/10 border border-primary/20">
-                <div className="h-6 w-6 bg-primary rounded"></div>
+          <div className="text-center space-y-5 sm:space-y-6">
+            <div className="inline-flex items-center gap-3 mb-3">
+              <div className="p-3 rounded-lg bg-primary/10 border border-primary/20">
+                <div className="h-7 w-7 bg-primary rounded"></div>
               </div>
             </div>
-            <h1 className="text-balance text-3xl sm:text-4xl lg:text-5xl font-extrabold tracking-tight">
+            <h1 className="text-balance text-4xl sm:text-5xl lg:text-6xl font-extrabold tracking-tight">
               PaperPaste
             </h1>
-            <p className="text-pretty text-base sm:text-lg text-muted-foreground">
+            <p className="text-pretty text-lg sm:text-xl text-muted-foreground max-w-xl mx-auto">
               Secure, real-time clipboard syncing across all your devices.
             </p>
           </div>
@@ -136,14 +137,14 @@ export default function HomePage() {
           {/* Form Section */}
           <div className="w-full">
             <EnvBanner />
-            <Card className="p-6 sm:p-8 text-center border-2 hover:border-primary/20 transition-colors relative overflow-hidden animated-border-card">
-              <CardContent className="space-y-6">
+            <Card className="p-6 sm:p-10 text-center border-2 hover:border-primary/20 transition-colors relative overflow-hidden animated-border-card">
+              <CardContent className="space-y-8">
                 <JoinForm prefilledCode={prefilledCode} />
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-center gap-4">
                   <Button
                     type="button"
                     variant="outline"
-                    className="w-full sm:w-auto border-2 hover:border-primary/20"
+                    className="w-full sm:w-auto border-2 hover:border-primary/20 h-12 text-base"
                     onClick={() => setScanOpen(true)}
                   >
                     Scan QR to Join
@@ -160,6 +161,8 @@ export default function HomePage() {
         onClose={() => setScanOpen(false)}
         onDetected={handleQrDetected}
       />
+      
+      <Footer />
     </main>
   );
 }
