@@ -369,6 +369,13 @@ END $$;
 GRANT EXECUTE ON FUNCTION public.kick_device(uuid) TO anon;
 GRANT EXECUTE ON FUNCTION public.cleanup_inactive_sessions() TO anon;
 
+-- Explicit grants for Data API access (Supabase breaking change May 30, 2026)
+-- Reference: https://github.com/orgs/supabase/discussions/45329
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.sessions TO anon;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.devices TO anon;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.items TO anon;
+GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO anon;
+
 -- Create storage bucket for file uploads
 INSERT INTO storage.buckets (id, name, public)
 VALUES ('paperpaste', 'paperpaste', true)
